@@ -218,17 +218,16 @@ export default function AIWorkbench() {
             </div>
           </div>
 
-          <main className="flex-1 min-w-0 h-full flex flex-col">
-            {/* Mobile top bar */}
-            <div className="md:hidden sticky top-0 z-30 bg-[#0d1117] border-b border-gray-800 px-3 py-2 flex items-center justify-between">
-              <button aria-label="Open menu" className="text-gray-300 hover:text-white" onClick={() => setIsMobileSidebarOpen(true)}>
-                <Menu className="w-5 h-5" />
-              </button>
-              <div className="text-white text-sm font-medium">OmniChat</div>
-              <button aria-label="Open settings" className="text-gray-300 hover:text-white" onClick={() => setActiveView("settings") }>
-                <Settings className="w-5 h-5" />
-              </button>
-            </div>
+          <main className="flex-1 min-w-0 h-full flex flex-col relative">
+            {/* Mobile floating menu button (no top bar) */}
+            <button
+              aria-label="Open menu"
+              className="md:hidden fixed left-3 z-30 rounded-md bg-[#0d1117]/90 border border-gray-800 text-gray-300 hover:text-white hover:bg-gray-800 p-2 shadow-sm"
+              style={{ top: `calc(env(safe-area-inset-top, 0px) + 8px)` }}
+              onClick={() => setIsMobileSidebarOpen(true)}
+            >
+              <Menu className="w-5 h-5" />
+            </button>
 
             <div className="flex-1 min-h-0 relative">
               <Suspense fallback={<LoadingFallback className="h-full" />}>

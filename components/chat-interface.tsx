@@ -800,8 +800,8 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
                 Choose a category below or ask me anything
               </p>
               
-              {/* Category Pills */}
-              <div className="flex items-center justify-center gap-2 mb-6 flex-wrap">
+              {/* Category Pills - 2x2 on small screens */}
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-center sm:gap-2 mb-6">
                 <button 
                   onClick={() => setSelectedCategory(selectedCategory === 'create' ? null : 'create')}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-all duration-200 ${
