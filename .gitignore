@@ -1,0 +1,92 @@
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+dist/
+.swc/
+.turbo/
+coverage/
+
+# Build/deploy
+.vercel/
+
+# Caches
+.cache/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Env files (keep an example committed if needed)
+.env
+.env.*
+!.env.example
+*.local
+
+# Editors/AI tooling (requested + common)
+.claude/
+.cursor/
+.windsurf/
+.codeium/
+.expo/
+.crewai/
+.crawl4ai/
+.embedchain/
+.ollama/
+.mem0/
+
+# Project-specific
+# Request: ignore favicon assets so they don't get committed accidentally
+app/favicon.ico
+public/favicon.ico
+
+# Misc IDE
+.idea/
+.vscode/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
