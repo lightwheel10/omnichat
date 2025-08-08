@@ -131,7 +131,7 @@ export function ConversationSidebar({
   }, [addConversation, updateConversation, setConversationLoading, clearConversationLoading])
 
   return (
-    <aside className={clsx("w-64 md:w-64 lg:w-72 border-r border-slate-600/50 flex flex-col bg-slate-800/50 relative flex-shrink-0", className)}>
+    <aside className={clsx("w-64 md:w-64 lg:w-72 border-r border-slate-600/50 bg-slate-800/50 relative flex-shrink-0 flex flex-col", className)}>
       {/* Header */}
       <div className="p-3 border-b border-slate-600/50">
         <div className="flex items-center justify-between mb-3">

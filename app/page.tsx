@@ -139,9 +139,10 @@ export default function AIWorkbench() {
         // Chat view with sidebar
         <>
           {/* Desktop sidebar */}
-          <div className="hidden md:block">
+          <div className="hidden md:block h-full">
             <Suspense fallback={<LoadingFallback className="w-64 md:w-64 lg:w-72 border-r border-gray-800 bg-[#0d1117] flex-shrink-0" />}>
               <ConversationSidebar
+                className="h-full"
                 selectedConversation={selectedConversation}
                 onConversationSelect={handleConversationSelect}
                 onNewConversation={handleNewConversation}
