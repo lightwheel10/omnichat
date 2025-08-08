@@ -29,6 +29,9 @@ Thumbs.db
 !.env.example
 *.local
 
+# Explicitly keep Next's type shim in Git
+!next-env.d.ts
+
 # Editors/AI tooling (requested + common)
 .claude/
 .cursor/
