@@ -2,6 +2,7 @@
 
 import { useState, useEffect, lazy, Suspense } from "react"
 import { LandingPage } from "@/components/landing-page"
+import { Menu, Settings } from "lucide-react"
 
 // Lazy load all components except landing page
 const ConversationSidebar = lazy(() => import("@/components/conversation-sidebar").then(module => ({ default: module.ConversationSidebar })))
@@ -29,6 +30,7 @@ export default function AIWorkbench() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [newChatKey, setNewChatKey] = useState<string>("initial")
   const [isLoading, setIsLoading] = useState(true)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
   useEffect(() => {
     // Check if user is already signed in
@@ -136,20 +138,55 @@ export default function AIWorkbench() {
       ) : (
         // Chat view with sidebar
         <>
-          <Suspense fallback={<LoadingFallback className="w-64 md:w-64 lg:w-72 border-r border-gray-800 bg-[#0d1117] flex-shrink-0" />}>
-            <ConversationSidebar
-              selectedConversation={selectedConversation}
-              onConversationSelect={handleConversationSelect}
-              onNewConversation={handleNewConversation}
-              onSettingsClick={() => setActiveView("settings")}
-              onSignOut={handleSignOut}
-            />
-          </Suspense>
-
-          <main className="flex-1 min-w-0">
-            <Suspense fallback={<LoadingFallback className="h-full" />}>
-              <OptimizedChatInterface key={selectedConversation || `new-${newChatKey}`} conversationId={selectedConversation} />
+          {/* Desktop sidebar */}
+          <div className="hidden md:block">
+            <Suspense fallback={<LoadingFallback className="w-64 md:w-64 lg:w-72 border-r border-gray-800 bg-[#0d1117] flex-shrink-0" />}>
+              <ConversationSidebar
+                selectedConversation={selectedConversation}
+                onConversationSelect={handleConversationSelect}
+                onNewConversation={handleNewConversation}
+                onSettingsClick={() => setActiveView("settings")}
+                onSignOut={handleSignOut}
+              />
             </Suspense>
+          </div>
+
+          {/* Mobile drawer sidebar */}
+          {isMobileSidebarOpen && (
+            <div className="md:hidden fixed inset-0 z-40">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setIsMobileSidebarOpen(false)} />
+              <div className="absolute left-0 top-0 h-full w-72">
+                <Suspense fallback={<LoadingFallback className="w-72 h-full" />}>
+                  <ConversationSidebar
+                    className="w-72 h-full border-r border-gray-800 bg-[#0d1117]"
+                    selectedConversation={selectedConversation}
+                    onConversationSelect={(id) => { setIsMobileSidebarOpen(false); handleConversationSelect(id) }}
+                    onNewConversation={() => { setIsMobileSidebarOpen(false); handleNewConversation() }}
+                    onSettingsClick={() => { setIsMobileSidebarOpen(false); setActiveView("settings") }}
+                    onSignOut={() => { setIsMobileSidebarOpen(false); handleSignOut() }}
+                  />
+                </Suspense>
+              </div>
+            </div>
+          )}
+
+          <main className="flex-1 min-w-0 h-full flex flex-col">
+            {/* Mobile top bar */}
+            <div className="md:hidden sticky top-0 z-30 bg-[#0d1117] border-b border-gray-800 px-3 py-2 flex items-center justify-between">
+              <button aria-label="Open menu" className="text-gray-300 hover:text-white" onClick={() => setIsMobileSidebarOpen(true)}>
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="text-white text-sm font-medium">OmniChat</div>
+              <button aria-label="Open settings" className="text-gray-300 hover:text-white" onClick={() => setActiveView("settings") }>
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0">
+              <Suspense fallback={<LoadingFallback className="h-full" />}>
+                <OptimizedChatInterface key={selectedConversation || `new-${newChatKey}`} conversationId={selectedConversation} />
+              </Suspense>
+            </div>
           </main>
         </>
       )}

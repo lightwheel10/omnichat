@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import clsx from "clsx"
 
 interface Conversation {
   id: string
@@ -28,6 +29,7 @@ interface ConversationSidebarProps {
   onNewConversation: () => void
   onSettingsClick: () => void
   onSignOut: () => void
+  className?: string
 }
 
 export function ConversationSidebar({
@@ -36,6 +38,7 @@ export function ConversationSidebar({
   onNewConversation,
   onSettingsClick,
   onSignOut,
+  className,
 }: ConversationSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -128,7 +131,7 @@ export function ConversationSidebar({
   }, [addConversation, updateConversation, setConversationLoading, clearConversationLoading])
 
   return (
-    <aside className="w-64 md:w-64 lg:w-72 border-r border-slate-600/50 flex flex-col bg-slate-800/50 relative flex-shrink-0">
+    <aside className={clsx("w-64 md:w-64 lg:w-72 border-r border-slate-600/50 flex flex-col bg-slate-800/50 relative flex-shrink-0", className)}>
       {/* Header */}
       <div className="p-3 border-b border-slate-600/50">
         <div className="flex items-center justify-between mb-3">
