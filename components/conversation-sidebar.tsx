@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Search, Settings, DollarSign, User, MessageSquare, MoreVertical, Trash2, Bot, Loader2 } from "lucide-react"
+import { Plus, Search, Settings, DollarSign, User, MessageSquare, MoreVertical, Trash2, Bot, Loader2, ChevronLeft } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +30,7 @@ interface ConversationSidebarProps {
   onSettingsClick: () => void
   onSignOut: () => void
   className?: string
+  onCollapse?: () => void
 }
 
 export function ConversationSidebar({
@@ -39,6 +40,7 @@ export function ConversationSidebar({
   onSettingsClick,
   onSignOut,
   className,
+  onCollapse,
 }: ConversationSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -131,7 +133,7 @@ export function ConversationSidebar({
   }, [addConversation, updateConversation, setConversationLoading, clearConversationLoading])
 
   return (
-    <aside className={clsx("w-64 md:w-64 lg:w-72 border-r border-slate-600/50 bg-slate-800/50 relative flex-shrink-0 flex flex-col", className)}>
+    <aside className={clsx("border-r border-slate-600/50 bg-slate-800/50 relative flex-shrink-0 flex flex-col overflow-hidden", className)}>
       {/* Header */}
       <div className="p-3 border-b border-slate-600/50">
         <div className="flex items-center justify-between mb-3">
@@ -139,6 +141,18 @@ export function ConversationSidebar({
             <Bot className="w-4 h-4 text-white" />
             <span className="font-medium text-white text-sm">OmniChat</span>
           </div>
+          {/* Collapse (desktop only) */}
+          {onCollapse && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden md:inline-flex h-6 w-6 p-0 text-slate-400 hover:text-white hover:bg-slate-700/40"
+              onClick={onCollapse}
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+          )}
         </div>
 
         {/* New Chat Button */}
