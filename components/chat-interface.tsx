@@ -6,7 +6,8 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Send, User, Bot, Zap, DollarSign, AlertCircle, Search, Paperclip, ArrowUp, Copy, RotateCcw, Edit3, ArrowDown, Sparkles, Code, BookOpen, Lightbulb, Globe, Wrench } from "lucide-react"
+import { Send, User, Bot, Zap, DollarSign, AlertCircle, Search, Paperclip, ArrowUp, Copy, RotateCcw, Edit3, ArrowDown, Sparkles, Code, BookOpen, Lightbulb, Globe, Wrench, MoreHorizontal, Check, X } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { aiService, AVAILABLE_MODELS, type ChatMessage, type ChatResponse } from "@/lib/ai-service"
 import { apiKeyStore } from "@/lib/api-key-store"
 import { FormattedText } from "@/components/formatted-text"
@@ -49,10 +50,15 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
   const [pinnedModels, setPinnedModels] = useState<string[]>(["gpt-4o-mini", "gpt-4o"])
+  const [isSmallScreen, setIsSmallScreen] = useState(false)
+  const [showMobileHeader, setShowMobileHeader] = useState(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const scrollThrottleRef = useRef<NodeJS.Timeout | null>(null)
+  const lastScrollTopRef = useRef(0)
+  const [activeTools, setActiveTools] = useState<{search: boolean; attach: boolean; mcp: boolean}>({ search: false, attach: false, mcp: false })
+  const toggleTool = (key: 'search' | 'attach' | 'mcp') => setActiveTools(prev => ({ ...prev, [key]: !prev[key] }))
 
   // Sample questions for different categories
   const sampleQuestions = {
@@ -102,6 +108,16 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
     localStorage.setItem("ai-chat-selected-model", newModel)
   }
 
+
+  useEffect(() => {
+    // Track responsive breakpoint for small screens
+    const media = window.matchMedia('(max-width: 640px)')
+    const handle = () => setIsSmallScreen(media.matches)
+    handle()
+    media.addEventListener('change', handle)
+    
+    return () => media.removeEventListener('change', handle)
+  }, [])
 
   useEffect(() => {
     setHasApiKey(
@@ -198,6 +214,18 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
       const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current
       const isAtBottom = scrollHeight - scrollTop - clientHeight < 100
       setShowScrollToBottom(!isAtBottom && messages.length > 0)
+
+      // Show/hide mobile header based on scroll direction
+      const last = lastScrollTopRef.current
+      const delta = scrollTop - last
+      if (Math.abs(delta) > 4) {
+        if (scrollTop < 8) {
+          setShowMobileHeader(true)
+        } else {
+          setShowMobileHeader(delta < 0)
+        }
+      }
+      lastScrollTopRef.current = scrollTop
     }
   }, [messages.length])
 
@@ -740,7 +768,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 relative">
       {/* Header with conversation name and stats */}
       {hasApiKey && messages.length > 0 && (
-        <div className="flex items-center justify-between p-4 border-b border-slate-600/50">
+        <div className="hidden md:flex items-center justify-between p-4 border-b border-slate-600/50">
           {/* Conversation Name */}
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-medium text-slate-300 truncate">
@@ -761,8 +789,8 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
             </h2>
           </div>
           
-          {/* Stats */}
-          <div className="flex items-center gap-6 text-xs text-slate-400">
+          {/* Stats (desktop only) */}
+          <div className="hidden md:flex items-center gap-6 text-xs text-slate-400">
             <div className="flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5" />
               <span>{totalTokens} tokens</span>
@@ -784,7 +812,41 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
       )}
 
       {/* Messages Container - extends to bottom */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pb-40 chat-scroll-area">
+      <div ref={scrollContainerRef} className={`flex-1 overflow-y-auto pb-40 chat-scroll-area ${messages.length > 0 ? 'pt-10 md:pt-0' : ''}`}>
+        {/* Mobile stats pill near hamburger */}
+        {messages.length > 0 && (
+          <div
+            className={`md:hidden fixed z-30 left-14 transition-opacity duration-150 ease-out ${showMobileHeader ? 'opacity-100' : 'opacity-0'}`}
+            style={{ top: `calc(env(safe-area-inset-top, 0px) + 8px)` }}
+          >
+            <div className="inline-flex h-9 items-center gap-3 text-[11px] leading-none text-slate-300 rounded-full px-2 overflow-hidden">
+              {/* Conversation title */}
+              <div className="max-w-[42vw] truncate text-slate-200">
+                {conversationId ? (() => {
+                  const savedConversations = localStorage.getItem("ai-chat-conversations")
+                  if (savedConversations) {
+                    try {
+                      const conversations = JSON.parse(savedConversations)
+                      const conversation = conversations.find((c: any) => c.id === conversationId)
+                      return conversation?.title || "Untitled"
+                    } catch {
+                      return "Untitled"
+                    }
+                  }
+                  return "Untitled"
+                })() : "Untitled"}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5" />
+                <span>{totalTokens}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>${totalCost.toFixed(5)}</span>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Modern Welcome Screen */}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full px-4 py-8">
@@ -804,7 +866,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
               <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-center sm:gap-2 mb-6">
                 <button 
                   onClick={() => setSelectedCategory(selectedCategory === 'create' ? null : 'create')}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-all duration-200 ${
+                  className={`inline-flex w-full items-center justify-center sm:justify-start h-10 leading-none gap-2 px-3 rounded-full text-sm transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
                     selectedCategory === 'create' 
                       ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' 
                       : 'bg-gray-800/50 text-gray-400 border border-gray-700 hover:text-gray-300 hover:border-gray-600'
@@ -816,7 +878,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
                 
                 <button 
                   onClick={() => setSelectedCategory(selectedCategory === 'explore' ? null : 'explore')}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-all duration-200 ${
+                  className={`inline-flex w-full items-center justify-center sm:justify-start h-10 leading-none gap-2 px-3 rounded-full text-sm transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
                     selectedCategory === 'explore' 
                       ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' 
                       : 'bg-gray-800/50 text-gray-400 border border-gray-700 hover:text-gray-300 hover:border-gray-600'
@@ -828,7 +890,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
                 
                 <button 
                   onClick={() => setSelectedCategory(selectedCategory === 'code' ? null : 'code')}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-all duration-200 ${
+                  className={`inline-flex w-full items-center justify-center sm:justify-start h-10 leading-none gap-2 px-3 rounded-full text-sm transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
                     selectedCategory === 'code' 
                       ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
                       : 'bg-gray-800/50 text-gray-400 border border-gray-700 hover:text-gray-300 hover:border-gray-600'
@@ -840,7 +902,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
                 
                 <button 
                   onClick={() => setSelectedCategory(selectedCategory === 'learn' ? null : 'learn')}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-all duration-200 ${
+                  className={`inline-flex w-full items-center justify-center sm:justify-start h-10 leading-none gap-2 px-3 rounded-full text-sm transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
                     selectedCategory === 'learn' 
                       ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' 
                       : 'bg-gray-800/50 text-gray-400 border border-gray-700 hover:text-gray-300 hover:border-gray-600'
@@ -851,9 +913,9 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
                 </button>
               </div>
               
-              {/* Sample Questions */}
+              {/* Sample Questions (limit to 3 on small screens) */}
               <div className="space-y-2 max-w-md mx-auto">
-                {getCurrentQuestions().map((question, index) => (
+                {getCurrentQuestions().slice(0, isSmallScreen ? 3 : undefined).map((question, index) => (
                   <button 
                     key={index}
                     onClick={() => setMessage(question)}
@@ -881,12 +943,12 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
             {messages.map((msg, index) => (
               <div key={msg.id} className={`flex gap-4 group min-w-0 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 {msg.role === "assistant" && (
-                  <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="hidden sm:flex w-7 h-7 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full items-center justify-center flex-shrink-0">
                     <Bot className="w-3.5 h-3.5 text-white" />
                   </div>
                 )}
 
-                <div className={`${msg.role === "user" ? "max-w-[70%] order-1" : "flex-1 min-w-0"}`}>
+                <div className={`${msg.role === "user" ? "max-w-[85%] md:max-w-[70%] order-1" : "max-w-[90%] md:flex-1 min-w-0"}`}>
                   {editingMessageId === msg.id ? (
                     // Edit mode
                     <div className="space-y-3">
@@ -919,7 +981,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
                       <div className={`px-4 py-3 text-sm ${
                         msg.role === "user" 
                           ? "bg-blue-600 text-white ml-auto rounded-2xl" 
-                          : "text-gray-100"
+                          : "text-gray-100 rounded-2xl bg-slate-800/60 md:bg-transparent"
                       }`}>
                         <div className="leading-relaxed">
                           {msg.role === "assistant" ? (
@@ -935,69 +997,75 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
                       
                       {/* Message metadata + remaining context indicator (assistant only) */}
                       {msg.role === 'assistant' && (
-                      <div className={`flex items-center gap-2 mt-2 text-xs text-gray-500 justify-start`}>
-                        <span>{msg.timestamp}</span>
-                        {typeof msg.inputTokens === 'number' && (
-                          <>
-                            <span>•</span>
-                            <div className="flex items-center gap-1">
-                              <span className="text-slate-400">in</span>
-                              <Zap className="w-3 h-3" />
-                              <span>{msg.inputTokens}</span>
-                            </div>
-                          </>
-                        )}
-                        {typeof msg.outputTokens === 'number' && (
-                          <>
-                            <span>•</span>
-                            <div className="flex items-center gap-1">
-                              <span className="text-slate-400">out</span>
-                              <Zap className="w-3 h-3" />
-                              <span>{msg.outputTokens}</span>
-                            </div>
-                          </>
-                        )}
-                        {typeof msg.tokens === 'number' && !msg.outputTokens && !msg.inputTokens && (
-                          <>
-                            <span>•</span>
-                            <div className="flex items-center gap-1">
-                              <Zap className="w-3 h-3" />
-                              <span>{msg.tokens}</span>
-                            </div>
-                          </>
-                        )}
-                        {typeof msg.cost === 'number' && (
-                          <>
-                            <span>•</span>
-                            <div className="flex items-center gap-1">
-                              <DollarSign className="w-3 h-3" />
-                              <span>${msg.cost.toFixed(5)}</span>
-                            </div>
-                          </>
-                        )}
-                        {/* Only show circular usage after assistant messages, next to cost */}
-                        {(() => {
-                          const modelMax = (selectedModelInfo?.maxTokens) || 128000
-                          const used = msg.contextTokensAfter
-                          if (!used) return null
-                          return (
-                            <>
-                              <span>•</span>
-                              <CircularUsage used={used} max={modelMax} />
-                              <span>{Math.min(100, Math.round((used / modelMax) * 100))}%</span>
-                            </>
-                          )
-                        })()}
-                        {typeof msg.reasoningTokens === 'number' && msg.reasoningTokens > 0 && (
-                          <>
-                            <span>•</span>
-                            <div className="flex items-center gap-1">
-                              <span className="text-purple-300">reasoning</span>
-                              <span className="text-purple-300">{msg.reasoningTokens}</span>
-                            </div>
-                          </>
-                        )}
-                      </div>
+                        <>
+                          {/* Compact mobile meta */}
+                          <div className="flex sm:hidden items-center gap-2 mt-2 text-[11px] text-gray-500">
+                            <span>{msg.timestamp}</span>
+                          </div>
+                          {/* Detailed desktop meta */}
+                          <div className={`hidden sm:flex items-center gap-2 mt-2 text-xs text-gray-500 justify-start`}>
+                            <span>{msg.timestamp}</span>
+                            {typeof msg.inputTokens === 'number' && (
+                              <>
+                                <span>•</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-slate-400">in</span>
+                                  <Zap className="w-3 h-3" />
+                                  <span>{msg.inputTokens}</span>
+                                </div>
+                              </>
+                            )}
+                            {typeof msg.outputTokens === 'number' && (
+                              <>
+                                <span>•</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-slate-400">out</span>
+                                  <Zap className="w-3 h-3" />
+                                  <span>{msg.outputTokens}</span>
+                                </div>
+                              </>
+                            )}
+                            {typeof msg.tokens === 'number' && !msg.outputTokens && !msg.inputTokens && (
+                              <>
+                                <span>•</span>
+                                <div className="flex items-center gap-1">
+                                  <Zap className="w-3 h-3" />
+                                  <span>{msg.tokens}</span>
+                                </div>
+                              </>
+                            )}
+                            {typeof msg.cost === 'number' && (
+                              <>
+                                <span>•</span>
+                                <div className="flex items-center gap-1">
+                                  <DollarSign className="w-3 h-3" />
+                                  <span>${msg.cost.toFixed(5)}</span>
+                                </div>
+                              </>
+                            )}
+                            {(() => {
+                              const modelMax = (selectedModelInfo?.maxTokens) || 128000
+                              const used = msg.contextTokensAfter
+                              if (!used) return null
+                              return (
+                                <>
+                                  <span>•</span>
+                                  <CircularUsage used={used} max={modelMax} />
+                                  <span>{Math.min(100, Math.round((used / modelMax) * 100))}%</span>
+                                </>
+                              )
+                            })()}
+                            {typeof msg.reasoningTokens === 'number' && msg.reasoningTokens > 0 && (
+                              <>
+                                <span>•</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-purple-300">reasoning</span>
+                                  <span className="text-purple-300">{msg.reasoningTokens}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </>
                       )}
 
                       {/* Removed linear progress; circular indicator above conveys status */}
@@ -1048,7 +1116,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
                 </div>
 
                 {msg.role === "user" && (
-                  <div className="w-7 h-7 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="hidden sm:flex w-7 h-7 bg-gray-600 rounded-full items-center justify-center flex-shrink-0">
                     <User className="w-3.5 h-3.5 text-gray-300" />
                   </div>
                 )}
@@ -1099,11 +1167,40 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
           <div className="relative">
             {/* Input container with inline controls */}
             <div className="relative bg-slate-700/50 border border-slate-600/50 rounded-2xl shadow-lg hover:shadow-xl transition-shadow focus-within:shadow-xl focus-within:border-emerald-500/50">
-              <div className="flex items-center gap-3 p-3">
-                {/* Model selector */}
-                <div className="flex-shrink-0">
+              {/* Active tool chips */}
+              {(activeTools.search || activeTools.attach || activeTools.mcp) && (
+                <div className="px-3 pt-2 flex flex-wrap gap-2">
+                  {activeTools.search && (
+                    <span className="inline-flex items-center gap-2 text-emerald-300 bg-emerald-600/15 border border-emerald-500/30 rounded-full px-2 py-1 text-xs transition">
+                      <Search className="w-3.5 h-3.5" /> Search
+                      <button aria-label="Remove search" onClick={() => toggleTool('search')} className="hover:text-white">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  )}
+                  {activeTools.attach && (
+                    <span className="inline-flex items-center gap-2 text-emerald-300 bg-emerald-600/15 border border-emerald-500/30 rounded-full px-2 py-1 text-xs transition">
+                      <Paperclip className="w-3.5 h-3.5" /> Attach
+                      <button aria-label="Remove attach" onClick={() => toggleTool('attach')} className="hover:text-white">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  )}
+                  {activeTools.mcp && (
+                    <span className="inline-flex items-center gap-2 text-emerald-300 bg-emerald-600/15 border border-emerald-500/30 rounded-full px-2 py-1 text-xs transition">
+                      <Wrench className="w-3.5 h-3.5" /> MCP
+                      <button aria-label="Remove mcp" onClick={() => toggleTool('mcp')} className="hover:text-white">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 p-2 sm:p-3">
+                {/* Model selector (full-width on mobile) */}
+                <div className="sm:flex-shrink-0 sm:w-auto w-full">
                   <Select value={selectedModel} onValueChange={handleModelChange} disabled={!hasApiKey}>
-                    <SelectTrigger className="w-auto min-w-[140px] h-8 bg-transparent border-0 text-slate-300 hover:text-white text-sm px-2 rounded-lg focus:ring-0">
+                    <SelectTrigger className="w-full sm:w-auto min-w-[140px] h-9 bg-transparent border-0 text-slate-300 hover:text-white text-sm px-2 rounded-lg focus:ring-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-800 border border-slate-600/50 shadow-lg">
@@ -1120,8 +1217,8 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
                     </SelectContent>
                   </Select>
                 </div>
-                
-                {/* Text input */}
+
+                {/* Text input (grows) */}
                 <div className="flex-1">
                   <input
                     ref={textareaRef as any}
@@ -1129,47 +1226,81 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Type your message here..."
-                    className="w-full h-8 bg-transparent border-0 text-white placeholder:text-slate-400 focus:ring-0 focus:outline-none text-sm"
+                    className="w-full h-10 bg-transparent border-0 text-white placeholder:text-slate-400 focus:ring-0 focus:outline-none text-sm"
                     autoComplete="off"
                     spellCheck="false"
                   />
                 </div>
-                
-                {/* Utility buttons */}
-                <div className="flex items-center gap-1 flex-shrink-0">
+
+                {/* Utility buttons (hide most on mobile) */}
+                <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 text-slate-400 hover:text-slate-200 hover:bg-slate-600/50 rounded-lg"
+                    aria-pressed={activeTools.search}
+                    onClick={() => toggleTool('search')}
+                    className={`hidden sm:inline-flex h-8 w-8 p-0 rounded-lg ${activeTools.search ? 'text-emerald-300 bg-emerald-600/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-600/50'}`}
                     title="Search the web"
                   >
                     <Search className="w-4 h-4" />
                   </Button>
-                  
+
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 text-slate-400 hover:text-slate-200 hover:bg-slate-600/50 rounded-lg"
+                    aria-pressed={activeTools.attach}
+                    onClick={() => toggleTool('attach')}
+                    className={`hidden sm:inline-flex h-8 w-8 p-0 rounded-lg ${activeTools.attach ? 'text-emerald-300 bg-emerald-600/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-600/50'}`}
                     title="Attach files"
                   >
                     <Paperclip className="w-4 h-4" />
                   </Button>
-                  
+
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 text-slate-400 hover:text-slate-200 hover:bg-slate-600/50 rounded-lg"
+                    aria-pressed={activeTools.mcp}
+                    onClick={() => toggleTool('mcp')}
+                    className={`hidden sm:inline-flex h-8 w-8 p-0 rounded-lg ${activeTools.mcp ? 'text-emerald-300 bg-emerald-600/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-600/50'}`}
                     title="MCP"
                   >
                     <Wrench className="w-4 h-4" />
                   </Button>
-                  
+
+                  {/* Mobile overflow menu for extra actions */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={`relative inline-flex sm:hidden h-9 w-9 p-0 rounded-lg ${ (activeTools.search || activeTools.attach || activeTools.mcp) ? 'text-emerald-300 bg-emerald-600/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-600/50'}`}
+                        title="More"
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                        {(activeTools.search || activeTools.attach || activeTools.mcp) && (
+                          <span className="absolute top-1 right-1 block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44 bg-slate-800 border border-slate-600/50 text-slate-100">
+                      <DropdownMenuItem onClick={() => toggleTool('search')} className={`text-sm ${activeTools.search ? 'bg-slate-700/70 text-emerald-300' : ''}`}>
+                        <Search className="w-4 h-4 mr-2" /> Search the web {activeTools.search && <Check className="w-4 h-4 ml-auto" />}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => toggleTool('attach')} className={`text-sm ${activeTools.attach ? 'bg-slate-700/70 text-emerald-300' : ''}`}>
+                        <Paperclip className="w-4 h-4 mr-2" /> Attach files {activeTools.attach && <Check className="w-4 h-4 ml-auto" />}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => toggleTool('mcp')} className={`text-sm ${activeTools.mcp ? 'bg-slate-700/70 text-emerald-300' : ''}`}>
+                        <Wrench className="w-4 h-4 mr-2" /> MCP {activeTools.mcp && <Check className="w-4 h-4 ml-auto" />}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
                   {/* Send button */}
                   <Button
                     onClick={handleSend}
                     disabled={!message.trim() || isGenerating}
                     size="sm"
-                    className="h-8 w-8 p-0 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-600 rounded-lg transition-colors ml-1"
+                    className="h-9 w-9 p-0 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-600 rounded-lg transition-all ml-1 active:scale-95"
                     title="Send message (Ctrl+Enter)"
                   >
                     <ArrowUp className="w-4 h-4 text-white" />

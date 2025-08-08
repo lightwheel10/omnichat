@@ -141,17 +141,30 @@ export function ConversationSidebar({
             <Bot className="w-4 h-4 text-white" />
             <span className="font-medium text-white text-sm">OmniChat</span>
           </div>
-          {/* Collapse (desktop only) */}
+          {/* Collapse controls: desktop + mobile */}
           {onCollapse && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="hidden md:inline-flex h-6 w-6 p-0 text-slate-400 hover:text-white hover:bg-slate-700/40"
-              onClick={onCollapse}
-              aria-label="Collapse sidebar"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* Mobile close */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="inline-flex md:hidden h-6 w-6 p-0 text-slate-400 hover:text-white hover:bg-slate-700/40"
+                onClick={onCollapse}
+                aria-label="Close sidebar"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              {/* Desktop collapse */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hidden md:inline-flex h-6 w-6 p-0 text-slate-400 hover:text-white hover:bg-slate-700/40"
+                onClick={onCollapse}
+                aria-label="Collapse sidebar"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+            </div>
           )}
         </div>
 
