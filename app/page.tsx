@@ -194,24 +194,29 @@ export default function AIWorkbench() {
             </div>
           )}
 
-          {/* Mobile drawer sidebar */}
-          {isMobileSidebarOpen && (
-            <div className="md:hidden fixed inset-0 z-40">
-              <div className="absolute inset-0 bg-black/50" onClick={() => setIsMobileSidebarOpen(false)} />
-              <div className="absolute left-0 top-0 h-full w-72">
-                <Suspense fallback={<LoadingFallback className="w-72 h-full" />}>
-                  <ConversationSidebar
-                    className="w-72 h-full border-r border-gray-800 bg-[#0d1117]"
-                    selectedConversation={selectedConversation}
-                    onConversationSelect={(id) => { setIsMobileSidebarOpen(false); handleConversationSelect(id) }}
-                    onNewConversation={() => { setIsMobileSidebarOpen(false); handleNewConversation() }}
-                    onSettingsClick={() => { setIsMobileSidebarOpen(false); setActiveView("settings") }}
-                    onSignOut={() => { setIsMobileSidebarOpen(false); handleSignOut() }}
-                  />
-                </Suspense>
-              </div>
+          {/* Mobile drawer sidebar (always mounted for smooth transitions) */}
+          <div className={`md:hidden fixed inset-0 z-40 ${isMobileSidebarOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+            <div
+              className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ease-out ${isMobileSidebarOpen ? 'opacity-100' : 'opacity-0'}`}
+              onClick={() => setIsMobileSidebarOpen(false)}
+            />
+            <div
+              className={`absolute left-0 top-0 h-full w-72 bg-[#0d1117] border-r border-gray-800 shadow-xl transform transition-transform duration-200 ease-out ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+              style={{ willChange: 'transform' }}
+            >
+              <Suspense fallback={<LoadingFallback className="w-72 h-full" />}>
+                <ConversationSidebar
+                  className="w-72 h-full"
+                  selectedConversation={selectedConversation}
+                  onConversationSelect={(id) => { setIsMobileSidebarOpen(false); handleConversationSelect(id) }}
+                  onNewConversation={() => { setIsMobileSidebarOpen(false); handleNewConversation() }}
+                  onSettingsClick={() => { setIsMobileSidebarOpen(false); setActiveView("settings") }}
+                  onSignOut={() => { setIsMobileSidebarOpen(false); handleSignOut() }}
+                  onCollapse={() => setIsMobileSidebarOpen(false)}
+                />
+              </Suspense>
             </div>
-          )}
+          </div>
 
           <main className="flex-1 min-w-0 h-full flex flex-col">
             {/* Mobile top bar */}
