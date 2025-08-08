@@ -39,12 +39,12 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
       <main className="container mx-auto px-6 py-16 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
-            One Platform,
-            <span className="bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent"> All AI Models</span>
+            Your AI workspace for thinking, building, and shipping
+            <span className="block bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">— across every major model</span>
           </h1>
           <p className="text-xl text-slate-300 mb-8 max-w-3xl mx-auto">
-            Chat with OpenAI GPT, Google Gemini, Groq, and more - all in one unified interface. 
-            Bring your own API keys for free access, or subscribe for hassle-free unlimited usage.
+            OmniChat unifies OpenAI, Gemini, Groq and more into one fast, beautiful interface.
+            Keep full control with your own API keys, or turn on a managed plan and get straight to work.
           </p>
           <div className="flex justify-center">
             <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 px-8 py-3" onClick={onGetStarted}>
@@ -52,6 +52,16 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </div>
+        </div>
+
+        {/* Trust bar */}
+        <div className="mt-14 max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 opacity-90">
+          {["Privacy-first", "No vendor lock-in", "Streaming by default", "One interface"].map((item) => (
+            <div key={item} className="flex items-center justify-center gap-2 rounded-lg border border-slate-700/40 bg-slate-800/40 py-3 text-slate-300">
+              <Shield className="w-4 h-4 text-emerald-400" />
+              <span className="text-sm">{item}</span>
+            </div>
+          ))}
         </div>
 
         {/* Features Grid */}
@@ -86,6 +96,36 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
             </p>
           </div>
         </div>
+
+        {/* How it works */}
+        <div className="mt-24 max-w-5xl mx-auto">
+          <h2 className="text-3xl font-bold text-white text-center mb-10">How it works</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6">
+              <div className="w-10 h-10 rounded-md bg-emerald-500/20 flex items-center justify-center mb-3">
+                <Key className="w-5 h-5 text-emerald-400" />
+              </div>
+              <h3 className="text-white font-semibold mb-2">Connect</h3>
+              <p className="text-slate-300 text-sm">Add your keys for OpenAI, Gemini, Groq and more. Or skip this step with a managed plan.</p>
+            </div>
+            <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6">
+              <div className="w-10 h-10 rounded-md bg-emerald-500/20 flex items-center justify-center mb-3">
+                <MessageSquare className="w-5 h-5 text-emerald-400" />
+              </div>
+              <h3 className="text-white font-semibold mb-2">Ask</h3>
+              <p className="text-slate-300 text-sm">Chat naturally, run structured prompts, and switch models without losing context.</p>
+            </div>
+            <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6">
+              <div className="w-10 h-10 rounded-md bg-emerald-500/20 flex items-center justify-center mb-3">
+                <Zap className="w-5 h-5 text-emerald-400" />
+              </div>
+              <h3 className="text-white font-semibold mb-2">Ship</h3>
+              <p className="text-slate-300 text-sm">Export results, copy code with formatting, and move faster with clean, readable outputs.</p>
+            </div>
+          </div>
+        </div>
+
+        
 
         {/* Pricing Section */}
         <div className="mt-24 max-w-5xl mx-auto">
@@ -249,19 +289,45 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
           </div>
         </div>
 
-        {/* Supported Models Section */}
-        <div className="mt-8 text-center">
-          <h2 className="text-lg font-semibold text-white mb-4">Supported Models</h2>
-          <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
-            <div className="p-3 bg-slate-800/30 rounded-lg backdrop-blur-sm">
-              <h3 className="font-medium text-white text-sm mb-1">OpenAI</h3>
-              <p className="text-xs text-slate-400">GPT-4o, GPT-4</p>
-            </div>
-            <div className="p-3 bg-slate-800/30 rounded-lg backdrop-blur-sm">
-              <h3 className="font-medium text-white text-sm mb-1">Google</h3>
-              <p className="text-xs text-slate-400">Gemini Pro</p>
-            </div>
+        {/* Testimonials */}
+        <div className="mt-24 max-w-5xl mx-auto">
+          <h2 className="text-3xl font-bold text-white text-center mb-10">People who switched, stayed</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            {["The table rendering is superb — exactly like pro chat apps.", "Swapping models mid‑chat saves me hours weekly.", "Clean UI, zero clutter. It just streams fast and looks great."].map((quote, idx) => (
+              <div key={idx} className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6">
+                <Star className="w-4 h-4 text-emerald-400 mb-3" />
+                <p className="text-slate-200 text-sm">“{quote}”</p>
+              </div>
+            ))}
           </div>
+        </div>
+
+        {/* FAQ */}
+        <div className="mt-24 max-w-3xl mx-auto">
+          <h2 className="text-3xl font-bold text-white text-center mb-6">Frequently asked</h2>
+          <div className="space-y-3">
+            {[{ q: "Do you store my API keys?", a: "Keys are encrypted locally in your browser. Nothing leaves your device unless you export it." },
+              { q: "Can I use multiple providers?", a: "Yes. Add as many as you like and switch models on the fly." },
+              { q: "Is there a free plan?", a: "Yes. Bring your own keys and use OmniChat for free." }].map(({ q, a }) => (
+              <details key={q} className="group rounded-lg border border-slate-700/50 bg-slate-800/40 p-4">
+                <summary className="cursor-pointer list-none text-white font-medium flex items-center justify-between">
+                  {q}
+                  <span className="ml-4 text-slate-400 group-open:rotate-180 transition-transform">▾</span>
+                </summary>
+                <p className="mt-2 text-slate-300 text-sm">{a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+
+        {/* Final CTA */}
+        <div className="mt-24 text-center">
+          <h2 className="text-3xl font-bold text-white mb-3">Ready to try OmniChat?</h2>
+          <p className="text-slate-300 mb-6">Sign up in seconds. No credit card required on the free plan.</p>
+          <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 px-8 py-3" onClick={onGetStarted}>
+            Create your account
+            <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
         </div>
 
       </main>
