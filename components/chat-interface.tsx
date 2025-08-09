@@ -37,7 +37,18 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
   const [selectedModel, setSelectedModel] = useState(() => {
     // Load persisted model from localStorage on initial render
     const savedModel = localStorage.getItem("ai-chat-selected-model")
-    return savedModel || "gpt-4o-mini"
+    if (savedModel) return savedModel
+    // Respect Settings default model when no previous selection exists
+    try {
+      const settingsRaw = localStorage.getItem("ai-workbench-settings")
+      if (settingsRaw) {
+        const settings = JSON.parse(settingsRaw)
+        if (settings?.defaultModel) return settings.defaultModel
+      }
+    } catch {
+      // ignore parse errors and fall through
+    }
+    return "gpt-4o-mini"
   })
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -63,6 +74,20 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
   const pendingConversationIdRef = useRef<string | null>(null)
   const [activeTools, setActiveTools] = useState<{search: boolean; attach: boolean; mcp: boolean}>({ search: false, attach: false, mcp: false })
   const toggleTool = (key: 'search' | 'attach' | 'mcp') => setActiveTools(prev => ({ ...prev, [key]: !prev[key] }))
+
+  // Resolve the default model from Settings (window live state or localStorage),
+  // and ensure it exists in AVAILABLE_MODELS; otherwise fall back to a safe default
+  const getDefaultModelFromSettings = useCallback((): string => {
+    try {
+      const windowDefault = (window as any)?.userSettings?.defaultModel
+      const settingsRaw = localStorage.getItem("ai-workbench-settings")
+      const savedDefault = settingsRaw ? JSON.parse(settingsRaw)?.defaultModel : undefined
+      const candidate = windowDefault || savedDefault || "gpt-4o-mini"
+      return AVAILABLE_MODELS.some(m => m.id === candidate) ? candidate : "gpt-4o-mini"
+    } catch {
+      return "gpt-4o-mini"
+    }
+  }, [])
 
   // Sample questions for different categories
   const sampleQuestions = {
@@ -192,6 +217,10 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
         setEditingMessageId(null)
         setEditingContent("")
         setConversationTitle("New Conversation")
+        // Respect Settings default model for new chats
+        const dm = getDefaultModelFromSettings()
+        setSelectedModel(dm)
+        localStorage.setItem("ai-chat-selected-model", dm)
       }
     }
 
@@ -284,11 +313,14 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
   useEffect(() => {
     const exists = AVAILABLE_MODELS.some(m => m.id === selectedModel)
     if (!exists) {
-      const fallback = pinnedModelsList[0]?.id || 'gpt-4o-mini'
+      // Prefer the Settings default model first, then first pinned, then a safe hardcoded default
+      const preferredDefault = getDefaultModelFromSettings()
+      const fallback = [preferredDefault, pinnedModelsList[0]?.id, 'gpt-4o-mini']
+        .find(id => !!id && AVAILABLE_MODELS.some(m => m.id === id as string)) as string || 'gpt-4o-mini'
       setSelectedModel(fallback)
       localStorage.setItem("ai-chat-selected-model", fallback)
     }
-  }, [selectedModel, pinnedModelsList])
+  }, [selectedModel, pinnedModelsList, getDefaultModelFromSettings])
 
   // Models displayed in the selector: pinned ones plus current selection if it's not pinned
   const selectedModelInfoForList = AVAILABLE_MODELS.find(m => m.id === selectedModel)

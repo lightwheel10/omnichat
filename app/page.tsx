@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, lazy, Suspense } from "react"
+import { useState, useEffect, lazy, Suspense, useCallback } from "react"
 import { LandingPage } from "@/components/landing-page"
 import { Menu, Settings, SidebarOpen, Plus, Search } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
+import { AVAILABLE_MODELS } from "@/lib/ai-service"
 
 // Lazy load all components except landing page
 const ConversationSidebar = lazy(() => import("@/components/conversation-sidebar").then(module => ({ default: module.ConversationSidebar })))
@@ -45,6 +46,65 @@ export default function AIWorkbench() {
   useEffect(() => {
     // Supabase-only bootstrap
     let unsubscribe: (() => void) | undefined
+    const ensureDefaultUserSettings = () => {
+      try {
+        const key = "ai-workbench-settings"
+        const existing = localStorage.getItem(key)
+        const modelExists = (id: string | undefined) => !!id && AVAILABLE_MODELS.some(m => m.id === id)
+        const preferredPinned = ["gpt-4o-mini", "gpt-4o"].filter(modelExists)
+
+        if (!existing) {
+          const defaultModel = preferredPinned[0] || AVAILABLE_MODELS[0]?.id || "gpt-4o-mini"
+          const pinnedModels = preferredPinned.length ? preferredPinned : [defaultModel]
+          const settings = {
+            defaultModel,
+            streamingEnabled: true,
+            showTokenCount: true,
+            monthlyBudget: 200,
+            budgetAlerts: true,
+            pinnedModels,
+          }
+          localStorage.setItem(key, JSON.stringify(settings))
+          ;(window as any).userSettings = settings
+          return
+        }
+
+        // Normalize existing settings to ensure at least one pinned model and a valid default
+        let parsed: any
+        try { parsed = JSON.parse(existing) } catch { parsed = {} }
+        let pinnedModels: string[] = Array.isArray(parsed.pinnedModels) ? parsed.pinnedModels : []
+        let defaultModel: string | undefined = parsed.defaultModel
+
+        // Ensure pinned models exist and not empty
+        pinnedModels = pinnedModels.filter(modelExists)
+        if (pinnedModels.length === 0) {
+          pinnedModels = preferredPinned.length ? preferredPinned : [AVAILABLE_MODELS[0]?.id || "gpt-4o-mini"]
+        }
+
+        // Ensure default model is valid and pinned
+        if (!modelExists(defaultModel)) {
+          defaultModel = pinnedModels[0]
+        }
+        const ensuredDefaultModel: string = defaultModel || pinnedModels[0]
+        if (!pinnedModels.includes(ensuredDefaultModel)) {
+          pinnedModels = [ensuredDefaultModel, ...pinnedModels]
+        }
+
+        const normalized = {
+          streamingEnabled: true,
+          showTokenCount: true,
+          monthlyBudget: typeof parsed.monthlyBudget === 'number' ? parsed.monthlyBudget : 200,
+          budgetAlerts: parsed.budgetAlerts !== false,
+          ...parsed,
+          defaultModel: ensuredDefaultModel,
+          pinnedModels,
+        }
+        localStorage.setItem(key, JSON.stringify(normalized))
+        ;(window as any).userSettings = normalized
+      } catch {
+        // ignore
+      }
+    }
     const init = async () => {
       try {
         if (supabase) {
@@ -52,6 +112,9 @@ export default function AIWorkbench() {
           const hasSession = !!session
           setIsAuthenticated(hasSession)
           setActiveView(prev => (prev ?? (hasSession ? "chat" : "landing")))
+          if (hasSession) {
+            ensureDefaultUserSettings()
+          }
           const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, sess: unknown) => {
             const isSignedIn = !!sess
             setIsAuthenticated(isSignedIn)
@@ -69,6 +132,7 @@ export default function AIWorkbench() {
                 if (prev === "landing" || prev === "signin" || prev === "signup") return "chat"
                 return prev
               })
+              ensureDefaultUserSettings()
             }
             // TOKEN_REFRESHED, USER_UPDATED, etc. → do not override current view
           })
@@ -97,6 +161,8 @@ export default function AIWorkbench() {
     if (error) throw error
     setIsAuthenticated(true)
     setActiveView("chat")
+    // After sign-in, ensure default settings exist
+    try { (window as any).userSettings = (window as any).userSettings || JSON.parse(localStorage.getItem('ai-workbench-settings') || '{}') } catch {}
   }
 
   const handleSignUp = async (email: string, password: string) => {
@@ -107,6 +173,7 @@ export default function AIWorkbench() {
     if (sessionData.session) {
       setIsAuthenticated(true)
       setActiveView("chat")
+      // On successful sign-up, defaults will be applied by auth state handler
     } else {
       setActiveView("signin")
     }
@@ -317,7 +384,7 @@ export default function AIWorkbench() {
 
             <div className="flex-1 min-h-0 relative">
               <Suspense fallback={<LoadingFallback className="h-full" />}>
-                <OptimizedChatInterface conversationId={selectedConversation} />
+                <OptimizedChatInterface key={newChatKey} conversationId={selectedConversation} />
               </Suspense>
             </div>
           </main>
