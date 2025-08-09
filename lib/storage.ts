@@ -40,17 +40,7 @@ function notify() {
   listeners.forEach(fn => fn())
 }
 
-function getLocalConversations(): StoredConversation[] {
-  if (typeof window === 'undefined') return []
-  const raw = localStorage.getItem('ai-chat-conversations')
-  if (!raw) return []
-  try { return JSON.parse(raw) } catch { return [] }
-}
-
-function setLocalConversations(convs: StoredConversation[]) {
-  if (typeof window === 'undefined') return
-  localStorage.setItem('ai-chat-conversations', JSON.stringify(convs))
-}
+// Removed localStorage fallback: Supabase-only
 
 async function isSignedIn(): Promise<boolean> {
   if (!supabase) return false
@@ -196,78 +186,32 @@ async function deleteDbConversation(id: string) {
   notify()
 }
 
-// Local fallback implementation
-const localStorageAPI: StorageAPI = {
+// No local fallback implementation
+
+export const storage: StorageAPI = {
   async getConversations() {
-    return getLocalConversations()
+    if (!(await isSignedIn())) return []
+    return getDbConversations()
   },
   async getConversation(id: string) {
-    const conv = getLocalConversations().find(c => c.id === id)
-    return conv || null
+    if (!(await isSignedIn())) return null
+    return getDbConversation(id)
   },
   async createConversation(data) {
-    const id = `conv-${Date.now()}`
-    const conv: StoredConversation = {
-      id,
-      title: data.title,
-      preview: data.preview,
-      tokens: data.tokens ?? 0,
-      cost: data.cost ?? 0,
-      createdAt: new Date().toISOString(),
-      messages: data.messages
-    }
-    const convs = [conv, ...getLocalConversations()]
-    setLocalConversations(convs)
-    notify()
-    return id
+    if (!(await isSignedIn())) throw new Error('Not authenticated')
+    return createDbConversation(data)
   },
   async updateConversation(id, updates) {
-    const convs = getLocalConversations()
-    const next = convs.map(c => c.id === id ? {
-      ...c,
-      ...('title' in updates ? { title: updates.title! } : {}),
-      ...('preview' in updates ? { preview: updates.preview } : {}),
-      ...('tokens' in updates ? { tokens: updates.tokens } : {}),
-      ...('cost' in updates ? { cost: updates.cost } : {}),
-      ...(updates.messages ? { messages: updates.messages } : {}),
-    } : c)
-    setLocalConversations(next)
-    notify()
+    if (!(await isSignedIn())) throw new Error('Not authenticated')
+    return updateDbConversation(id, updates)
   },
   async deleteConversation(id) {
-    const next = getLocalConversations().filter(c => c.id !== id)
-    setLocalConversations(next)
-    notify()
+    if (!(await isSignedIn())) throw new Error('Not authenticated')
+    return deleteDbConversation(id)
   },
   subscribe(callback) {
     listeners.add(callback)
     return () => listeners.delete(callback)
-  }
-}
-
-export const storage: StorageAPI = {
-  async getConversations() {
-    if (await isSignedIn()) return getDbConversations()
-    return localStorageAPI.getConversations()
-  },
-  async getConversation(id: string) {
-    if (await isSignedIn()) return getDbConversation(id)
-    return localStorageAPI.getConversation(id)
-  },
-  async createConversation(data) {
-    if (await isSignedIn()) return createDbConversation(data)
-    return localStorageAPI.createConversation(data)
-  },
-  async updateConversation(id, updates) {
-    if (await isSignedIn()) return updateDbConversation(id, updates)
-    return localStorageAPI.updateConversation(id, updates)
-  },
-  async deleteConversation(id) {
-    if (await isSignedIn()) return deleteDbConversation(id)
-    return localStorageAPI.deleteConversation(id)
-  },
-  subscribe(callback) {
-    return localStorageAPI.subscribe(callback)
   }
 }
 

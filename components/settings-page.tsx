@@ -12,6 +12,7 @@ import {
 import { apiKeyStore } from "@/lib/api-key-store"
 import { supabase } from "@/lib/supabaseClient"
 import { aiService, AVAILABLE_MODELS } from "@/lib/ai-service"
+import { storage } from "@/lib/storage"
 import { AVAILABLE_MODELS as OPENAI_MODELS } from "@/lib/openai-service"
 import { AVAILABLE_GEMINI_MODELS } from "@/lib/gemini-service"
 import { AVAILABLE_GROQ_MODELS } from "@/lib/groq-service"
@@ -86,21 +87,19 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
           return
         }
       }
-      const storedUserEmail = localStorage.getItem("ai-workbench-user") || ""
-      setUserEmail(storedUserEmail)
+      setUserEmail("")
     }
     void loadEmail()
 
-    // Load conversations for billing calculations
-    const savedConversations = localStorage.getItem("ai-chat-conversations")
-    if (savedConversations) {
+    // Load conversations for billing calculations via storage API
+    ;(async () => {
       try {
-        const parsedConversations = JSON.parse(savedConversations)
-        setConversations(parsedConversations)
+        const list = await storage.getConversations()
+        setConversations(list as any)
       } catch (error) {
         console.error("Failed to load conversations:", error)
       }
-    }
+    })()
 
     // Load user settings
     const savedSettings = localStorage.getItem("ai-workbench-settings")

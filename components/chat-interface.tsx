@@ -54,6 +54,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
   const [pinnedModels, setPinnedModels] = useState<string[]>(["gpt-4o-mini", "gpt-4o"])
   const [isSmallScreen, setIsSmallScreen] = useState(false)
   const [showMobileHeader, setShowMobileHeader] = useState(true)
+  const [conversationTitle, setConversationTitle] = useState<string>("New Conversation")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -167,10 +168,12 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
             const totalCostUsed = mapped.reduce((sum: number, msg: Message) => sum + (msg.cost || 0), 0)
             setTotalTokens(totalTokensUsed)
             setTotalCost(totalCostUsed)
+            setConversationTitle(conv.title || "Untitled Conversation")
           } else {
             setMessages([])
             setTotalTokens(0)
             setTotalCost(0)
+            setConversationTitle("Untitled Conversation")
           }
         } catch (error) {
           console.error('Failed to load conversation from storage:', error)
@@ -188,6 +191,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
         setError(null)
         setEditingMessageId(null)
         setEditingContent("")
+        setConversationTitle("New Conversation")
       }
     }
 
@@ -724,7 +728,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
     setEditingContent(content)
   }
 
-  const handleSaveEdit = (messageId: string) => {
+  const handleSaveEdit = async (messageId: string) => {
     const updatedMessages = messages.map(msg => 
       msg.id === messageId ? { ...msg, content: editingContent } : msg
     )
@@ -732,22 +736,12 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
     setEditingMessageId(null)
     setEditingContent("")
     
-    // Save to localStorage
+    // Persist via storage API when a conversation exists (Supabase if signed-in)
     if (conversationId) {
-      const savedConversations = localStorage.getItem("ai-chat-conversations")
-      if (savedConversations) {
-        try {
-          const conversations = JSON.parse(savedConversations)
-          const updatedConversations = conversations.map((conv: any) => {
-            if (conv.id === conversationId) {
-              return { ...conv, messages: updatedMessages }
-            }
-            return conv
-          })
-          localStorage.setItem("ai-chat-conversations", JSON.stringify(updatedConversations))
-        } catch (error) {
-          console.error("Failed to save edited message:", error)
-        }
+      try {
+        await storage.updateConversation(conversationId, { messages: updatedMessages as any })
+      } catch (error) {
+        console.error("Failed to save edited message:", error)
       }
     }
   }
@@ -793,20 +787,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
           {/* Conversation Name */}
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-medium text-slate-300 truncate">
-              {conversationId ? (() => {
-                // Get conversation title from localStorage
-                const savedConversations = localStorage.getItem("ai-chat-conversations")
-                if (savedConversations) {
-                  try {
-                    const conversations = JSON.parse(savedConversations)
-                    const conversation = conversations.find((c: any) => c.id === conversationId)
-                    return conversation?.title || "Untitled Conversation"
-                  } catch {
-                    return "Untitled Conversation"
-                  }
-                }
-                return "Untitled Conversation"
-              })() : "New Conversation"}
+              {conversationId ? (conversationTitle || "Untitled Conversation") : "New Conversation"}
             </h2>
           </div>
           
@@ -843,19 +824,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
             <div className="inline-flex h-9 items-center gap-3 text-[11px] leading-none text-slate-300 rounded-full px-2 overflow-hidden">
               {/* Conversation title */}
               <div className="max-w-[42vw] truncate text-slate-200">
-                {conversationId ? (() => {
-                  const savedConversations = localStorage.getItem("ai-chat-conversations")
-                  if (savedConversations) {
-                    try {
-                      const conversations = JSON.parse(savedConversations)
-                      const conversation = conversations.find((c: any) => c.id === conversationId)
-                      return conversation?.title || "Untitled"
-                    } catch {
-                      return "Untitled"
-                    }
-                  }
-                  return "Untitled"
-                })() : "Untitled"}
+                {conversationId ? (conversationTitle || "Untitled") : "Untitled"}
               </div>
               <div className="flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5" />

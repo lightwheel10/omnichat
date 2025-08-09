@@ -43,35 +43,24 @@ export default function AIWorkbench() {
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false)
 
   useEffect(() => {
-    // Session bootstrap: prefer Supabase auth; fall back to local flag if present
+    // Supabase-only bootstrap
     const init = async () => {
       try {
         if (supabase) {
           const { data: { session } } = await supabase.auth.getSession()
-          if (session) {
-            setIsAuthenticated(true)
-            setActiveView("chat")
-            setIsLoading(false)
-            return
-          }
-          // Listen for changes to keep UI in sync
+          const hasSession = !!session
+          setIsAuthenticated(hasSession)
+          setActiveView(hasSession ? "chat" : "landing")
           supabase.auth.onAuthStateChange((_evt: unknown, sess: unknown) => {
-            const hasSession = !!(sess as any)
-            setIsAuthenticated(hasSession)
-            setActiveView(hasSession ? "chat" : "landing")
+            const s = !!(sess as any)
+            setIsAuthenticated(s)
+            setActiveView(s ? "chat" : "landing")
           })
+        } else {
+          setIsAuthenticated(false)
+          setActiveView("landing")
         }
       } finally {
-        // Legacy fallback: preserve current behavior when Supabase is not configured
-        if (!supabase) {
-          const savedAuth = localStorage.getItem("ai-workbench-auth")
-          if (savedAuth === "true") {
-            setIsAuthenticated(true)
-            setActiveView("chat")
-          } else {
-            setActiveView("landing")
-          }
-        }
         setIsLoading(false)
       }
     }
@@ -85,59 +74,30 @@ export default function AIWorkbench() {
   }, [setSelectedConversation])
 
   const handleSignIn = async (email: string, password: string) => {
-    if (supabase) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) throw error
-      setIsAuthenticated(true)
-      setActiveView("chat")
-      return
-    }
-    // Fallback legacy path
-    localStorage.setItem("ai-workbench-auth", "true")
-    localStorage.setItem("ai-workbench-user", email)
+    if (!supabase) throw new Error('Supabase not configured')
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
     setIsAuthenticated(true)
     setActiveView("chat")
   }
 
   const handleSignUp = async (email: string, password: string) => {
-    if (supabase) {
-      const { data, error } = await supabase.auth.signUp({ email, password })
-      if (error) {
-        const message = (error.message || '').toLowerCase()
-        // If the user already exists, automatically try to sign them in
-        if (message.includes('already registered') || (error as any).status === 422 || (error as any).code === 'user_already_exists') {
-          const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-          if (signInError) throw signInError
-          setIsAuthenticated(true)
-          setActiveView("chat")
-          return
-        }
-        throw error
-      }
-      // If email confirmations are disabled, session will be available immediately
-      const { data: sessionData } = await supabase.auth.getSession()
-      if (sessionData.session) {
-        setIsAuthenticated(true)
-        setActiveView("chat")
-      } else {
-        // Otherwise show sign-in view (in case confirmation was required)
-        setActiveView("signin")
-      }
-      return
+    if (!supabase) throw new Error('Supabase not configured')
+    const { error } = await supabase.auth.signUp({ email, password })
+    if (error) throw error
+    const { data: sessionData } = await supabase.auth.getSession()
+    if (sessionData.session) {
+      setIsAuthenticated(true)
+      setActiveView("chat")
+    } else {
+      setActiveView("signin")
     }
-    // Fallback legacy path
-    localStorage.setItem("ai-workbench-auth", "true")
-    localStorage.setItem("ai-workbench-user", email)
-    setIsAuthenticated(true)
-    setActiveView("chat")
   }
 
   const handleSignOut = async () => {
     if (supabase) {
       await supabase.auth.signOut()
     }
-    localStorage.removeItem("ai-workbench-auth")
-    localStorage.removeItem("ai-workbench-user")
     setIsAuthenticated(false)
     setActiveView("landing")
   }

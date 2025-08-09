@@ -57,7 +57,7 @@ export function ConversationList({
   )
 
   const totalCost = conversations.reduce((sum, conv) => sum + conv.cost, 0)
-  const userEmail = localStorage.getItem("ai-workbench-user") || "user@example.com"
+  // Supabase-only: fetch user details from Supabase client if this component remains in use.
 
   return (
     <aside className="w-80 border-r border-gray-200 flex flex-col bg-gray-50">

@@ -105,7 +105,7 @@ export function ConversationSidebar({
   )
 
   const totalCost = conversations.reduce((sum, conv) => sum + (conv.cost || 0), 0)
-  const userEmail = localStorage.getItem("ai-workbench-user") || "user@example.com"
+  // In Supabase-only mode, user email could be sourced via a separate user profile fetch if needed.
 
   const formatTimestamp = (date: Date) => {
     const now = new Date()
