@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { 
   ArrowLeft, Key, CreditCard, Zap, User,
-  Eye, EyeOff, TestTube, LogOut, CheckCircle, XCircle, Bot, BarChart3, Wrench, Pin
+  Eye, EyeOff, LogOut, CheckCircle, XCircle, Bot, BarChart3, Wrench, Pin, Save, Trash2
 } from "lucide-react"
 import { apiKeyStore } from "@/lib/api-key-store"
 import { supabase } from "@/lib/supabaseClient"
@@ -24,6 +24,7 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
+  const serverProxy = process.env.NEXT_PUBLIC_SERVER_PROXY === '1'
   const [activeSection, setActiveSection] = useState("api-keys")
   const [showOpenaiKey, setShowOpenaiKey] = useState(false)
   const [showGeminiKey, setShowGeminiKey] = useState(false)
@@ -53,14 +54,17 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
   // User and billing data
   const [conversations, setConversations] = useState<any[]>([])
   const [userEmail, setUserEmail] = useState("")
+  // Keystore security state
+  const [hasKeystore, setHasKeystore] = useState<boolean>(() => (apiKeyStore as any).isPassphraseConfigured?.() || false)
+  const [isLocked, setIsLocked] = useState<boolean>(() => (apiKeyStore as any).isLocked?.() || false)
+  const [passphrase, setPassphrase] = useState<string>("")
 
-  // Load existing API keys on mount
-  useEffect(() => {
+  const loadApiKeysFromStore = () => {
     const storedOpenaiKey = apiKeyStore.getApiKey()
     const storedGeminiKey = apiKeyStore.getGeminiApiKey()
     const storedGroqKey = apiKeyStore.getGroqApiKey()
     const storedClaudeKey = apiKeyStore.getClaudeApiKey?.()
-    
+
     if (storedOpenaiKey) {
       setOpenaiKey(storedOpenaiKey)
       setOpenaiStatus(aiService.hasValidApiKey('openai') ? 'success' : 'unknown')
@@ -76,6 +80,29 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
     if (storedClaudeKey) {
       setClaudeKey(storedClaudeKey)
       setClaudeStatus(aiService.hasValidApiKey('claude') ? 'success' : 'unknown')
+    }
+  }
+
+  // Load existing API keys on mount
+  useEffect(() => {
+    const serverProxy = process.env.NEXT_PUBLIC_SERVER_PROXY === '1'
+    if (serverProxy) {
+      ;(async () => {
+        try {
+          const [o, g, r, c] = await Promise.all([
+            fetch('/api/keys/openai').then(res => res.json()).catch(() => null),
+            fetch('/api/keys/gemini').then(res => res.json()).catch(() => null),
+            fetch('/api/keys/groq').then(res => res.json()).catch(() => null),
+            fetch('/api/keys/claude').then(res => res.json()).catch(() => null),
+          ])
+          if (o?.hasKey) setOpenaiStatus('success')
+          if (g?.hasKey) setGeminiStatus('success')
+          if (r?.hasKey) setGroqStatus('success')
+          if (c?.hasKey) setClaudeStatus('success')
+        } catch {}
+      })()
+    } else {
+      loadApiKeysFromStore()
     }
 
     // Load user data and settings
@@ -118,6 +145,16 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
     }
   }, [])
 
+  // Keep lock state in sync
+  useEffect(() => {
+    if (serverProxy) return
+    const interval = setInterval(() => {
+      setHasKeystore((apiKeyStore as any).isPassphraseConfigured?.() || false)
+      setIsLocked((apiKeyStore as any).isLocked?.() || false)
+    }, 500)
+    return () => clearInterval(interval)
+  }, [serverProxy])
+
   // Expose settings to window object for chat interface
   useEffect(() => {
     (window as any).userSettings = {
@@ -133,29 +170,125 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
   // API Key handlers
   const handleOpenaiKeyChange = (value: string) => {
     setOpenaiKey(value)
-    apiKeyStore.setApiKey(value)
-    aiService.refreshClient('openai')
+    setOpenaiStatus('unknown')
+  }
+
+  const saveOpenaiKey = async () => {
+    const value = openaiKey.trim()
+    if (!value) return
+    if (process.env.NEXT_PUBLIC_SERVER_PROXY === '1') {
+      const test = await fetch('/api/keys/openai/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: value }) }).then(r => r.json()).catch(() => ({ ok: false }))
+      if (!test?.ok) { setOpenaiStatus('error'); return }
+      await fetch('/api/keys/openai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: value }) })
+      setOpenaiStatus('success')
+    } else {
+      if ((apiKeyStore as any).isLocked?.()) return
+      apiKeyStore.setApiKey(value)
+      aiService.refreshClient('openai')
+      setOpenaiStatus('success')
+    }
+  }
+
+  const deleteOpenaiKey = async () => {
+    if (process.env.NEXT_PUBLIC_SERVER_PROXY === '1') {
+      await fetch('/api/keys/openai', { method: 'DELETE' })
+    } else {
+      apiKeyStore.clearApiKey()
+    }
+    setOpenaiKey("")
     setOpenaiStatus('unknown')
   }
 
   const handleGeminiKeyChange = (value: string) => {
     setGeminiKey(value)
-    apiKeyStore.setGeminiApiKey(value)
-    aiService.refreshClient('gemini')
+    setGeminiStatus('unknown')
+  }
+
+  const saveGeminiKey = async () => {
+    const value = geminiKey.trim()
+    if (!value) return
+    if (process.env.NEXT_PUBLIC_SERVER_PROXY === '1') {
+      const test = await fetch('/api/keys/gemini/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: value }) }).then(r => r.json()).catch(() => ({ ok: false }))
+      if (!test?.ok) { setGeminiStatus('error'); return }
+      await fetch('/api/keys/gemini', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: value }) })
+      setGeminiStatus('success')
+    } else {
+      if ((apiKeyStore as any).isLocked?.()) return
+      apiKeyStore.setGeminiApiKey(value)
+      aiService.refreshClient('gemini')
+      setGeminiStatus('success')
+    }
+  }
+
+  const deleteGeminiKey = async () => {
+    if (process.env.NEXT_PUBLIC_SERVER_PROXY === '1') {
+      await fetch('/api/keys/gemini', { method: 'DELETE' })
+    } else {
+      apiKeyStore.clearGeminiApiKey()
+    }
+    setGeminiKey("")
     setGeminiStatus('unknown')
   }
 
   const handleGroqKeyChange = (value: string) => {
     setGroqKey(value)
-    apiKeyStore.setGroqApiKey(value)
-    aiService.refreshClient('groq')
+    setGroqStatus('unknown')
+  }
+
+  const saveGroqKey = async () => {
+    const value = groqKey.trim()
+    if (!value) return
+    if (process.env.NEXT_PUBLIC_SERVER_PROXY === '1') {
+      const test = await fetch('/api/keys/groq/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: value }) }).then(r => r.json()).catch(() => ({ ok: false }))
+      if (!test?.ok) { setGroqStatus('error'); return }
+      await fetch('/api/keys/groq', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: value }) })
+      setGroqStatus('success')
+    } else {
+      if ((apiKeyStore as any).isLocked?.()) return
+      apiKeyStore.setGroqApiKey(value)
+      aiService.refreshClient('groq')
+      setGroqStatus('success')
+    }
+  }
+
+  const deleteGroqKey = async () => {
+    if (process.env.NEXT_PUBLIC_SERVER_PROXY === '1') {
+      await fetch('/api/keys/groq', { method: 'DELETE' })
+    } else {
+      apiKeyStore.clearGroqApiKey()
+    }
+    setGroqKey("")
     setGroqStatus('unknown')
   }
 
   const handleClaudeKeyChange = (value: string) => {
     setClaudeKey(value)
-    apiKeyStore.setClaudeApiKey(value)
-    aiService.refreshClient('claude')
+    setClaudeStatus('unknown')
+  }
+
+  const saveClaudeKey = async () => {
+    const value = claudeKey.trim()
+    if (!value) return
+    if (process.env.NEXT_PUBLIC_SERVER_PROXY === '1') {
+      const test = await fetch('/api/keys/claude/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: value }) }).then(r => r.json()).catch(() => ({ ok: false }))
+      if (!test?.ok) { setClaudeStatus('error'); return }
+      await fetch('/api/keys/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: value }) })
+      setClaudeStatus('success')
+    } else {
+      if ((apiKeyStore as any).isLocked?.()) return
+      apiKeyStore.setClaudeApiKey(value)
+      aiService.refreshClient('claude')
+      setClaudeStatus('success')
+    }
+  }
+
+  const deleteClaudeKey = async () => {
+    if (process.env.NEXT_PUBLIC_SERVER_PROXY === '1') {
+      await fetch('/api/keys/claude', { method: 'DELETE' })
+    } else {
+      apiKeyStore.clearClaudeApiKey?.()
+    }
+    setClaudeKey("")
     setClaudeStatus('unknown')
   }
 
@@ -341,6 +474,129 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
 
   const renderAPIKeysSection = () => (
     <div className="space-y-8">
+      {/* Keystore Security (hidden when server proxy is enabled) */}
+      {!serverProxy && (
+      <div className="space-y-3 p-4 border border-slate-600/50 rounded-lg bg-slate-800/40">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-white font-medium">Keystore Security</h4>
+            <p className="text-gray-400 text-sm">Client-side encryption with passphrase (AES‑GCM)</p>
+          </div>
+          <div className={`text-xs px-2 py-1 rounded ${hasKeystore ? (isLocked ? 'text-yellow-300 bg-yellow-500/10' : 'text-green-400 bg-green-400/10') : 'text-gray-400 bg-gray-700'}`}>
+            {hasKeystore ? (isLocked ? 'Locked' : 'Unlocked') : 'Not configured'}
+          </div>
+        </div>
+        {!hasKeystore && (
+          <div className="flex gap-2 items-center">
+            <Input
+              type="password"
+              placeholder="Create a passphrase (min 8 chars)"
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              className="bg-transparent border-gray-700 text-white h-9"
+            />
+            <Button
+              onClick={async () => {
+                try {
+                  await (apiKeyStore as any).setPassphrase?.(passphrase)
+                  setPassphrase("")
+                  setHasKeystore(true)
+                  setIsLocked(false)
+                  loadApiKeysFromStore()
+                } catch (e) {
+                  console.error(e)
+                  alert((e as Error).message)
+                }
+              }}
+              className="h-9"
+              disabled={passphrase.length < 8}
+            >
+              Set Passphrase
+            </Button>
+          </div>
+        )}
+        {hasKeystore && isLocked && (
+          <div className="flex gap-2 items-center">
+            <Input
+              type="password"
+              placeholder="Enter passphrase to unlock"
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              className="bg-transparent border-gray-700 text-white h-9"
+            />
+            <Button
+              onClick={async () => {
+                const ok = await (apiKeyStore as any).unlock?.(passphrase)
+                if (!ok) {
+                  alert('Incorrect passphrase')
+                }
+                setPassphrase("")
+                setIsLocked(!ok)
+                if (ok) loadApiKeysFromStore()
+              }}
+              className="h-9"
+              disabled={passphrase.length < 1}
+            >
+              Unlock
+            </Button>
+          </div>
+        )}
+        {hasKeystore && !isLocked && (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="border-gray-600 text-gray-300"
+              onClick={() => (apiKeyStore as any).lock?.()}
+            >
+              Lock Keystore
+            </Button>
+            <Button
+              variant="outline"
+              className="border-gray-600 text-gray-300"
+              onClick={async () => {
+                try {
+                  const blob = await (apiKeyStore as any).exportKeystore?.()
+                  const file = new Blob([blob || '{}'], { type: 'application/json' })
+                  const url = URL.createObjectURL(file)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = 'keystore.json'
+                  a.click()
+                  URL.revokeObjectURL(url)
+                } catch (e) {
+                  alert('Export failed')
+                }
+              }}
+            >
+              Export Keystore
+            </Button>
+            <Button
+              variant="outline"
+              className="border-gray-600 text-gray-300"
+              onClick={async () => {
+                try {
+                  const input = document.createElement('input')
+                  input.type = 'file'
+                  input.accept = 'application/json'
+                  input.onchange = async () => {
+                    const file = input.files?.[0]
+                    if (!file) return
+                    const json = await file.text()
+                    await (apiKeyStore as any).importKeystore?.(json)
+                    alert('Keystore imported. Unlock with your passphrase.')
+                  }
+                  input.click()
+                } catch (e) {
+                  alert('Import failed')
+                }
+              }}
+            >
+              Import Keystore
+            </Button>
+          </div>
+        )}
+      </div>
+      )}
       {/* OpenAI */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -372,19 +628,27 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-gray-400 hover:text-white"
-              onClick={testOpenaiConnection}
-              disabled={openaiStatus === 'testing' || !openaiKey.trim()}
+              className="h-7 w-7 p-0 text-gray-400 hover:text-red-300"
+              onClick={deleteOpenaiKey}
+              title="Delete key"
             >
-              {openaiStatus === 'testing' ? (
-                <div className="w-3.5 h-3.5 border border-gray-400 border-t-transparent rounded-full animate-spin" />
-              ) : openaiStatus === 'success' ? (
-                <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-              ) : openaiStatus === 'error' ? (
-                <XCircle className="w-3.5 h-3.5 text-red-400" />
-              ) : (
-                <TestTube className="w-3.5 h-3.5" />
-              )}
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+            {openaiStatus === 'success' && (
+              <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+            )}
+            {openaiStatus === 'error' && (
+              <XCircle className="w-3.5 h-3.5 text-red-400" />
+            )}
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={saveOpenaiKey}
+              disabled={!openaiKey.trim()}
+              title="Save key"
+            >
+              <Save className="w-3.5 h-3.5 mr-1" /> Save
             </Button>
           </div>
         </div>
@@ -421,19 +685,27 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-gray-400 hover:text-white"
-              onClick={testGeminiConnection}
-              disabled={geminiStatus === 'testing' || !geminiKey.trim()}
+              className="h-7 w-7 p-0 text-gray-400 hover:text-red-300"
+              onClick={deleteGeminiKey}
+              title="Delete key"
             >
-              {geminiStatus === 'testing' ? (
-                <div className="w-3.5 h-3.5 border border-gray-400 border-t-transparent rounded-full animate-spin" />
-              ) : geminiStatus === 'success' ? (
-                <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-              ) : geminiStatus === 'error' ? (
-                <XCircle className="w-3.5 h-3.5 text-red-400" />
-              ) : (
-                <TestTube className="w-3.5 h-3.5" />
-              )}
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+            {geminiStatus === 'success' && (
+              <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+            )}
+            {geminiStatus === 'error' && (
+              <XCircle className="w-3.5 h-3.5 text-red-400" />
+            )}
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={saveGeminiKey}
+              disabled={!geminiKey.trim()}
+              title="Save key"
+            >
+              <Save className="w-3.5 h-3.5 mr-1" /> Save
             </Button>
           </div>
         </div>
@@ -470,19 +742,27 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-gray-400 hover:text-white"
-              onClick={testGroqConnection}
-              disabled={groqStatus === 'testing' || !groqKey.trim()}
+              className="h-7 w-7 p-0 text-gray-400 hover:text-red-300"
+              onClick={deleteGroqKey}
+              title="Delete key"
             >
-              {groqStatus === 'testing' ? (
-                <div className="w-3.5 h-3.5 border border-gray-400 border-t-transparent rounded-full animate-spin" />
-              ) : groqStatus === 'success' ? (
-                <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-              ) : groqStatus === 'error' ? (
-                <XCircle className="w-3.5 h-3.5 text-red-400" />
-              ) : (
-                <TestTube className="w-3.5 h-3.5" />
-              )}
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+            {groqStatus === 'success' && (
+              <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+            )}
+            {groqStatus === 'error' && (
+              <XCircle className="w-3.5 h-3.5 text-red-400" />
+            )}
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={saveGroqKey}
+              disabled={!groqKey.trim()}
+              title="Save key"
+            >
+              <Save className="w-3.5 h-3.5 mr-1" /> Save
             </Button>
           </div>
         </div>
@@ -519,19 +799,27 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-gray-400 hover:text-white"
-              onClick={testClaudeConnection}
-              disabled={claudeStatus === 'testing' || !claudeKey.trim()}
+              className="h-7 w-7 p-0 text-gray-400 hover:text-red-300"
+              onClick={deleteClaudeKey}
+              title="Delete key"
             >
-              {claudeStatus === 'testing' ? (
-                <div className="w-3.5 h-3.5 border border-gray-400 border-t-transparent rounded-full animate-spin" />
-              ) : claudeStatus === 'success' ? (
-                <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-              ) : claudeStatus === 'error' ? (
-                <XCircle className="w-3.5 h-3.5 text-red-400" />
-              ) : (
-                <TestTube className="w-3.5 h-3.5" />
-              )}
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+            {claudeStatus === 'success' && (
+              <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+            )}
+            {claudeStatus === 'error' && (
+              <XCircle className="w-3.5 h-3.5 text-red-400" />
+            )}
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={saveClaudeKey}
+              disabled={!claudeKey.trim()}
+              title="Save key"
+            >
+              <Save className="w-3.5 h-3.5 mr-1" /> Save
             </Button>
           </div>
         </div>

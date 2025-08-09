@@ -56,6 +56,8 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
   const [isMessagesLoading, setIsMessagesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasApiKey, setHasApiKey] = useState(false)
+  const serverProxy = process.env.NEXT_PUBLIC_SERVER_PROXY === '1'
+  const [serverKeyStatus, setServerKeyStatus] = useState<{openai?: boolean; gemini?: boolean; groq?: boolean; claude?: boolean}>({})
   const [totalTokens, setTotalTokens] = useState(0)
   const [totalCost, setTotalCost] = useState(0)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
@@ -155,6 +157,25 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
       apiKeyStore.hasGroqApiKey() ||
       (apiKeyStore as any).hasClaudeApiKey?.()
     )
+
+    // If server proxy is enabled, check server-side key availability
+    if (serverProxy) {
+      ;(async () => {
+        try {
+          const [o, g, r, c] = await Promise.all([
+            fetch('/api/keys/openai').then(res => res.json()).catch(() => null),
+            fetch('/api/keys/gemini').then(res => res.json()).catch(() => null),
+            fetch('/api/keys/groq').then(res => res.json()).catch(() => null),
+            fetch('/api/keys/claude').then(res => res.json()).catch(() => null),
+          ])
+          const status = { openai: !!o?.hasKey, gemini: !!g?.hasKey, groq: !!r?.hasKey, claude: !!c?.hasKey }
+          setServerKeyStatus(status)
+          setHasApiKey(status.openai || status.gemini || status.groq || status.claude)
+        } catch {
+          // ignore
+        }
+      })()
+    }
 
     // Load pinned models from settings
     const loadPinnedModels = () => {
@@ -380,19 +401,30 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
 
     // Check if we have the appropriate API key for the selected model
     const selectedModelInfoNow = AVAILABLE_MODELS.find(m => m.id === selectedModel)
-    const needsOpenAI = selectedModelInfoNow?.provider === 'openai' && !apiKeyStore.hasApiKey()
-    const needsGemini = selectedModelInfoNow?.provider === 'gemini' && !apiKeyStore.hasGeminiApiKey()
-    const needsGroq = selectedModelInfoNow?.provider === 'groq' && !apiKeyStore.hasGroqApiKey()
-    const needsClaude = selectedModelInfoNow?.provider === 'claude' && !(apiKeyStore as any).hasClaudeApiKey?.()
+    const needsOpenAI = selectedModelInfoNow?.provider === 'openai' && (
+      serverProxy ? !serverKeyStatus.openai : !apiKeyStore.hasApiKey()
+    )
+    const needsGemini = selectedModelInfoNow?.provider === 'gemini' && (
+      serverProxy ? !serverKeyStatus.gemini : !apiKeyStore.hasGeminiApiKey()
+    )
+    const needsGroq = selectedModelInfoNow?.provider === 'groq' && (
+      serverProxy ? !serverKeyStatus.groq : !apiKeyStore.hasGroqApiKey()
+    )
+    const needsClaude = selectedModelInfoNow?.provider === 'claude' && (
+      serverProxy ? !serverKeyStatus.claude : !(apiKeyStore as any).hasClaudeApiKey?.()
+    )
     
     if (!hasApiKey || needsOpenAI || needsGemini || needsGroq || needsClaude) {
+      const locked = (apiKeyStore as any).isLocked?.() === true
       const providerName = selectedModelInfoNow?.provider === 'gemini' ? 'Gemini' : 
                           selectedModelInfoNow?.provider === 'groq' ? 'Groq' :
                           selectedModelInfoNow?.provider === 'claude' ? 'Claude' : 'OpenAI'
       const demoResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `👋 This is a demo response! To get real AI responses, please add your ${providerName} API key in the settings. Your API key will be stored securely in your browser and used only for your conversations.`,
+        content: locked
+          ? `🔒 Keystore locked. Unlock it in Settings to use your ${providerName} API key.`
+          : `👋 This is a demo response! To get real AI responses, please add your ${providerName} API key in Settings. Your key is encrypted locally with your passphrase and used only for your conversations.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
       

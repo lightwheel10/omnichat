@@ -48,6 +48,10 @@ export const AVAILABLE_MODELS: UnifiedModel[] = [
 export { type ChatMessage, type ChatResponse }
 
 class UnifiedAIService {
+  private useServerProxy(): boolean {
+    return (process.env.NEXT_PUBLIC_SERVER_PROXY === '1')
+  }
+
   async sendMessage(
     messages: ChatMessage[],
     model: string,
@@ -57,6 +61,29 @@ class UnifiedAIService {
     const modelInfo = AVAILABLE_MODELS.find(m => m.id === model)
     if (!modelInfo) {
       throw new Error(`Model ${model} not found`)
+    }
+    if (this.useServerProxy()) {
+      const res = await fetch(`/api/ai/${modelInfo.provider}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, model, temperature, maxTokens })
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(text || 'AI proxy error')
+      }
+      const data: any = await res.json()
+      if (!data.ok) throw new Error(data.error || 'AI proxy error')
+      return {
+        content: data.content || '',
+        model,
+        tokensUsed: {
+          input: data.usage?.prompt_tokens ?? data.usage?.input_tokens ?? 0,
+          output: data.usage?.completion_tokens ?? data.usage?.output_tokens ?? 0,
+          total: data.usage?.total_tokens ?? 0,
+        },
+        cost: 0,
+      }
     }
 
     if (modelInfo.provider === 'openai') {
@@ -79,6 +106,38 @@ class UnifiedAIService {
     const modelInfo = AVAILABLE_MODELS.find(m => m.id === model)
     if (!modelInfo) {
       throw new Error(`Model ${model} not found`)
+    }
+    if (this.useServerProxy()) {
+      const res = await fetch(`/api/ai/${modelInfo.provider}/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, model, temperature, maxTokens })
+      })
+      if (!res.ok || !res.body) {
+        const text = await res.text().catch(() => '')
+        throw new Error(text || 'AI streaming proxy error')
+      }
+      // Wrap Uint8Array stream into a text stream
+      const reader = res.body.getReader()
+      const textStream = new ReadableStream<string>({
+        start(controller) {
+          function pump() {
+            reader.read().then(({ done, value }) => {
+              if (done) { controller.close(); return }
+              try {
+                const chunk = new TextDecoder().decode(value)
+                controller.enqueue(chunk)
+              } catch (e) {
+                controller.error(e)
+                return
+              }
+              pump()
+            }).catch(err => controller.error(err))
+          }
+          pump()
+        }
+      })
+      return { stream: textStream, model }
     }
 
     if (modelInfo.provider === 'openai') {
