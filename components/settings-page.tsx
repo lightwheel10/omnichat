@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { 
-  ArrowLeft, Key, CreditCard, Zap, User, Palette, 
+  ArrowLeft, Key, CreditCard, Zap, User,
   Eye, EyeOff, TestTube, LogOut, CheckCircle, XCircle, Bot, BarChart3, Wrench, Pin
 } from "lucide-react"
 import { apiKeyStore } from "@/lib/api-key-store"
@@ -337,7 +337,6 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
     { id: "usage", title: "Usage", icon: BarChart3 },
     { id: "models", title: "Models", icon: Zap },
     { id: "profile", title: "Profile", icon: User },
-    { id: "appearance", title: "Appearance", icon: Palette }
   ]
 
   const renderAPIKeysSection = () => (
@@ -1447,14 +1446,7 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
       case "profile":
         return renderProfileSection()
       default:
-        return (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="text-gray-400 mb-2">Coming soon</div>
-              <div className="text-gray-500 text-sm">This section is under development</div>
-            </div>
-          </div>
-        )
+        return renderAPIKeysSection()
     }
   }
 

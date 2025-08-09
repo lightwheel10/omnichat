@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus, Search, Settings, DollarSign, User } from "lucide-react"
@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { supabase } from "@/lib/supabaseClient"
 
 interface ConversationListProps {
   selectedConversation: string
@@ -24,6 +25,7 @@ export function ConversationList({
   onSettingsClick,
 }: ConversationListProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [userEmail, setUserEmail] = useState<string>("")
 
   const conversations = [
     {
@@ -57,7 +59,19 @@ export function ConversationList({
   )
 
   const totalCost = conversations.reduce((sum, conv) => sum + conv.cost, 0)
-  // Supabase-only: fetch user details from Supabase client if this component remains in use.
+  // Load user email from Supabase
+  useEffect(() => {
+    (async () => {
+      try {
+        if (supabase) {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user?.email) setUserEmail(user.email)
+        }
+      } catch {
+        // ignore
+      }
+    })()
+  }, [])
 
   return (
     <aside className="w-80 border-r border-gray-200 flex flex-col bg-gray-50">

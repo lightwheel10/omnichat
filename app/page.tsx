@@ -44,18 +44,35 @@ export default function AIWorkbench() {
 
   useEffect(() => {
     // Supabase-only bootstrap
+    let unsubscribe: (() => void) | undefined
     const init = async () => {
       try {
         if (supabase) {
           const { data: { session } } = await supabase.auth.getSession()
           const hasSession = !!session
           setIsAuthenticated(hasSession)
-          setActiveView(hasSession ? "chat" : "landing")
-          supabase.auth.onAuthStateChange((_evt: unknown, sess: unknown) => {
-            const s = !!(sess as any)
-            setIsAuthenticated(s)
-            setActiveView(s ? "chat" : "landing")
+          setActiveView(prev => (prev ?? (hasSession ? "chat" : "landing")))
+          const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, sess: unknown) => {
+            const isSignedIn = !!sess
+            setIsAuthenticated(isSignedIn)
+
+            if (event === "SIGNED_OUT") {
+              setActiveView("landing")
+              return
+            }
+
+            // Avoid forcing navigation to chat when returning to the tab
+            // Only move to chat from auth/landing views on a real sign-in transition
+            if (event === "SIGNED_IN") {
+              setActiveView(prev => {
+                if (prev === null) return "chat"
+                if (prev === "landing" || prev === "signin" || prev === "signup") return "chat"
+                return prev
+              })
+            }
+            // TOKEN_REFRESHED, USER_UPDATED, etc. → do not override current view
           })
+          unsubscribe = () => subscription.unsubscribe()
         } else {
           setIsAuthenticated(false)
           setActiveView("landing")
@@ -65,6 +82,7 @@ export default function AIWorkbench() {
       }
     }
     void init()
+    return () => { if (unsubscribe) unsubscribe() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
