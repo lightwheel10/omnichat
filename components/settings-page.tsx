@@ -10,6 +10,7 @@ import {
   Eye, EyeOff, TestTube, LogOut, CheckCircle, XCircle, Bot, BarChart3, Wrench, Pin
 } from "lucide-react"
 import { apiKeyStore } from "@/lib/api-key-store"
+import { supabase } from "@/lib/supabaseClient"
 import { aiService, AVAILABLE_MODELS } from "@/lib/ai-service"
 import { AVAILABLE_MODELS as OPENAI_MODELS } from "@/lib/openai-service"
 import { AVAILABLE_GEMINI_MODELS } from "@/lib/gemini-service"
@@ -77,8 +78,18 @@ export function SettingsPage({ onBack, onSignOut }: SettingsPageProps) {
     }
 
     // Load user data and settings
-    const storedUserEmail = localStorage.getItem("ai-workbench-user") || ""
-    setUserEmail(storedUserEmail)
+    const loadEmail = async () => {
+      if (supabase) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user?.email) {
+          setUserEmail(user.email)
+          return
+        }
+      }
+      const storedUserEmail = localStorage.getItem("ai-workbench-user") || ""
+      setUserEmail(storedUserEmail)
+    }
+    void loadEmail()
 
     // Load conversations for billing calculations
     const savedConversations = localStorage.getItem("ai-chat-conversations")

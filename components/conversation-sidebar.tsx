@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { storage, type StoredConversation } from "@/lib/storage"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus, Search, Settings, DollarSign, User, MessageSquare, MoreVertical, Trash2, Bot, Loader2, ChevronLeft } from "lucide-react"
@@ -44,28 +45,60 @@ export function ConversationSidebar({
 }: ConversationSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [conversations, setConversations] = useState<Conversation[]>([])
+  const [isLoadingList, setIsLoadingList] = useState<boolean>(true)
   const [loadingConversationId, setLoadingConversationId] = useState<string | null>(null)
 
-  // Load conversations from localStorage on mount
+  // Load conversations (cloud or local) on mount and on storage notifications
   useEffect(() => {
-    const saved = localStorage.getItem("ai-chat-conversations")
-    if (saved) {
+    let unsub: (() => void) | null = null
+    const hasLoadedRef = { current: false }
+    const load = async () => {
       try {
-        const parsed = JSON.parse(saved)
-        setConversations(parsed.map((conv: any) => ({
-          ...conv,
-          createdAt: new Date(conv.createdAt)
-        })))
-      } catch (error) {
-        console.error("Failed to load conversations:", error)
+        if (!hasLoadedRef.current) {
+          setIsLoadingList(true)
+        }
+        const items = await storage.getConversations()
+        const mapped: Conversation[] = items.map((c: StoredConversation) => ({
+          id: c.id,
+          title: c.title,
+          preview: c.preview || "",
+          tokens: c.tokens || 0,
+          cost: c.cost || 0,
+          createdAt: new Date(c.createdAt),
+          timestamp: formatTimestamp(new Date(c.createdAt)),
+        }))
+        setConversations(mapped)
+      } catch (e) {
+        console.error('Failed to load conversations', e)
+      } finally {
+        if (!hasLoadedRef.current) {
+          setIsLoadingList(false)
+          hasLoadedRef.current = true
+        }
       }
     }
+    void load()
+    // For subsequent storage notifications, update without skeleton
+    unsub = storage.subscribe(async () => {
+      try {
+        const items = await storage.getConversations()
+        const mapped: Conversation[] = items.map((c: StoredConversation) => ({
+          id: c.id,
+          title: c.title,
+          preview: c.preview || "",
+          tokens: c.tokens || 0,
+          cost: c.cost || 0,
+          createdAt: new Date(c.createdAt),
+          timestamp: formatTimestamp(new Date(c.createdAt)),
+        }))
+        setConversations(mapped)
+      } catch (e) {
+        console.error('Failed to refresh conversations', e)
+      }
+    })
+    return () => { if (unsub) unsub() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Save conversations to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem("ai-chat-conversations", JSON.stringify(conversations))
-  }, [conversations])
 
   const filteredConversations = conversations.filter((conv) =>
     conv.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -90,12 +123,15 @@ export function ConversationSidebar({
     }
   }
 
-  const deleteConversation = (id: string, e: React.MouseEvent) => {
+  const deleteConversation = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    setConversations(prev => prev.filter(conv => conv.id !== id))
-    if (selectedConversation === id) {
-      // If deleting the selected conversation, clear selection
-      onConversationSelect("")
+    try {
+      await storage.deleteConversation(id)
+      if (selectedConversation === id) {
+        onConversationSelect("")
+      }
+    } catch (err) {
+      console.error('Failed to delete conversation', err)
     }
   }
 
@@ -116,10 +152,20 @@ export function ConversationSidebar({
   // Functions to manage loading state
   const setConversationLoading = useCallback((id: string) => {
     setLoadingConversationId(id)
+    // eslint-disable-next-line no-console
+    console.log('[Sidebar] setConversationLoading', id)
   }, [])
 
   const clearConversationLoading = useCallback(() => {
     setLoadingConversationId(null)
+    // eslint-disable-next-line no-console
+    console.log('[Sidebar] clearConversationLoading')
+  }, [])
+
+  const removeConversation = useCallback((id: string) => {
+    setConversations(prev => prev.filter(c => c.id !== id))
+    // eslint-disable-next-line no-console
+    console.log('[Sidebar] removeConversation', id)
   }, [])
 
   // Expose functions to parent component
@@ -128,9 +174,12 @@ export function ConversationSidebar({
       addConversation,
       updateConversation,
       setConversationLoading,
-      clearConversationLoading
+      clearConversationLoading,
+      removeConversation
     }
-  }, [addConversation, updateConversation, setConversationLoading, clearConversationLoading])
+    // eslint-disable-next-line no-console
+    console.log('[Sidebar] conversationHelpers registered')
+  }, [addConversation, updateConversation, setConversationLoading, clearConversationLoading, removeConversation])
 
   return (
     <aside className={clsx("border-r border-slate-600/50 bg-slate-800/50 relative flex-shrink-0 flex flex-col overflow-hidden", className)}>
@@ -190,10 +239,18 @@ export function ConversationSidebar({
 
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto">
-        {/* Today section */}
-        {filteredConversations.length > 0 && (
-          <div className="px-3 py-2">
-            <h3 className="text-xs font-medium text-slate-400 mb-2">Today</h3>
+        <div className="px-3 py-2">
+          <h3 className="text-xs font-medium text-slate-400 mb-2">Today</h3>
+          {/* Loading skeleton */}
+          {isLoadingList ? (
+            <div className="space-y-1">
+              {Array.from({ length: 5 }).map((_, idx) => (
+                <div key={idx} className="p-2 rounded-lg bg-slate-700/20 border border-slate-700/30 animate-pulse">
+                  <div className="h-3 w-2/3 bg-slate-600/40 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : (
             <div className="space-y-1">
               {filteredConversations.map((conversation) => (
                 <div
@@ -208,15 +265,17 @@ export function ConversationSidebar({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       {loadingConversationId === conversation.id ? (
-                        <Loader2 className="w-3 h-3 flex-shrink-0 animate-spin text-emerald-400" />
+                        <Loader2 className="w-3 h-3 flex-shrink-0 animate-spin text-emerald-300" />
                       ) : (
                         <MessageSquare className="w-3 h-3 flex-shrink-0" />
                       )}
                       <span className="truncate text-xs">
                         {conversation.title}
                       </span>
+                      {/* Removed text badge; spinner icon on the left is sufficient */}
                     </div>
-                    <DropdownMenu>
+                    <div className="flex items-center gap-2">
+                      <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button 
                           variant="ghost" 
@@ -236,13 +295,17 @@ export function ConversationSidebar({
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
-                    </DropdownMenu>
+                      </DropdownMenu>
+                    </div>
                   </div>
                 </div>
               ))}
+              {filteredConversations.length === 0 && (
+                <div className="text-xs text-slate-500 py-6">No conversations yet</div>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Footer */}

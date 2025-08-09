@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Bot, Eye, EyeOff, Check } from "lucide-react"
+import { ArrowLeft, Bot, Eye, EyeOff, Check, Loader2, CheckCircle, XCircle } from "lucide-react"
+import { supabase } from "@/lib/supabaseClient"
 
 interface SignUpProps {
   onSignUp: (email: string, password: string) => void
@@ -20,8 +21,11 @@ export function SignUp({ onSignUp, onBackToLanding, onSwitchToSignIn }: SignUpPr
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'creating' | 'success' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = useState<string>("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (password !== confirmPassword) {
       alert("Passwords don't match!")
@@ -31,7 +35,22 @@ export function SignUp({ onSignUp, onBackToLanding, onSwitchToSignIn }: SignUpPr
       alert("Please agree to the terms and conditions")
       return
     }
-    onSignUp(email, password)
+    setIsLoading(true)
+    setStatus('creating')
+    setErrorMessage("")
+    try {
+      if (supabase) {
+        const { error } = await supabase.auth.signUp({ email, password })
+        if (error) throw error
+      }
+      await onSignUp(email, password)
+      setStatus('success')
+    } catch (err) {
+      setStatus('error')
+      setErrorMessage((err as Error).message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const passwordRequirements = [
@@ -71,9 +90,14 @@ export function SignUp({ onSignUp, onBackToLanding, onSwitchToSignIn }: SignUpPr
         <div className="max-w-sm mx-auto">
           <Card className="bg-slate-800/50 border-slate-700/50 backdrop-blur-xl">
             <CardHeader className="text-center pb-4">
-              <CardTitle className="text-lg font-semibold text-white">Create Account</CardTitle>
+              <CardTitle className="text-lg font-semibold text-white flex items-center justify-center gap-2">
+                Create Account
+                {status === 'creating' && <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />}
+                {status === 'success' && <CheckCircle className="w-4 h-4 text-emerald-400" />}
+                {status === 'error' && <XCircle className="w-4 h-4 text-red-400" />}
+              </CardTitle>
               <CardDescription className="text-slate-400 text-sm">
-                Start chatting with AI models
+                {status === 'creating' ? 'Creating your account…' : 'Start chatting with AI models'}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -173,11 +197,18 @@ export function SignUp({ onSignUp, onBackToLanding, onSwitchToSignIn }: SignUpPr
 
                 <Button
                   type="submit"
-                  className="w-full h-9 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg shadow-sm transition-all duration-200 text-sm"
-                  disabled={!email || !password || !confirmPassword || password !== confirmPassword || !agreedToTerms}
+                  className="w-full h-9 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg shadow-sm transition-all duration-200 text-sm disabled:opacity-60"
+                  disabled={isLoading || !email || !password || !confirmPassword || password !== confirmPassword || !agreedToTerms}
                 >
-                  Create Account
+                  {isLoading ? (
+                    <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Creating…</span>
+                  ) : (
+                    'Create Account'
+                  )}
                 </Button>
+                {status === 'error' && (
+                  <div className="text-xs text-red-400 text-center">{errorMessage}</div>
+                )}
               </form>
 
               <div className="mt-4 text-center">

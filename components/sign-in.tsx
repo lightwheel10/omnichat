@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Command, Eye, EyeOff } from "lucide-react"
+import { supabase } from "@/lib/supabaseClient"
 
 interface SignInProps {
   onSignIn: (email: string, password: string) => void
@@ -24,17 +25,31 @@ export function SignIn({ onSignIn }: SignInProps) {
     if (!email || !password) return
 
     setIsLoading(true)
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    onSignIn(email, password)
+    try {
+      if (supabase) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+      }
+      await onSignIn(email, password)
+    } catch (err) {
+      alert((err as Error).message)
+    }
     setIsLoading(false)
   }
 
   const handleDemoLogin = () => {
     setEmail("demo@example.com")
     setPassword("demo123")
-    setTimeout(() => {
-      onSignIn("demo@example.com", "demo123")
+    setTimeout(async () => {
+      try {
+        if (supabase) {
+          const { error } = await supabase.auth.signInWithPassword({ email: "demo@example.com", password: "demo123" })
+          if (error) throw error
+        }
+        await onSignIn("demo@example.com", "demo123")
+      } catch (err) {
+        alert((err as Error).message)
+      }
     }, 100)
   }
 

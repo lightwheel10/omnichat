@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Send, User, Bot, Zap, DollarSign, AlertCircle, Search, Paperclip, ArrowUp, Copy, RotateCcw, Edit3, ArrowDown, Sparkles, Code, BookOpen, Lightbulb, Globe, Wrench, MoreHorizontal, Check, X } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { aiService, AVAILABLE_MODELS, type ChatMessage, type ChatResponse } from "@/lib/ai-service"
+import { storage, type StoredConversation, type StoredMessage } from "@/lib/storage"
 import { apiKeyStore } from "@/lib/api-key-store"
 import { FormattedText } from "@/components/formatted-text"
 
@@ -41,6 +42,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasApiKey, setHasApiKey] = useState(false)
   const [totalTokens, setTotalTokens] = useState(0)
@@ -57,6 +59,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const scrollThrottleRef = useRef<NodeJS.Timeout | null>(null)
   const lastScrollTopRef = useRef(0)
+  const pendingConversationIdRef = useRef<string | null>(null)
   const [activeTools, setActiveTools] = useState<{search: boolean; attach: boolean; mcp: boolean}>({ search: false, attach: false, mcp: false })
   const toggleTool = (key: 'search' | 'attach' | 'mcp') => setActiveTools(prev => ({ ...prev, [key]: !prev[key] }))
 
@@ -126,7 +129,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
       apiKeyStore.hasGroqApiKey() ||
       (apiKeyStore as any).hasClaudeApiKey?.()
     )
-    
+
     // Load pinned models from settings
     const loadPinnedModels = () => {
       const savedSettings = localStorage.getItem("ai-workbench-settings")
@@ -140,49 +143,55 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
           console.error("Failed to load pinned models:", error)
         }
       }
-      
+
       // Also check window.userSettings for real-time updates
       if ((window as any).userSettings?.pinnedModels) {
         setPinnedModels((window as any).userSettings.pinnedModels)
       }
     }
-    
+
     loadPinnedModels()
-    
+
     // Set up interval to check for updates from settings
     const interval = setInterval(loadPinnedModels, 1000)
-    
-    // Load conversation messages if conversationId exists
-    if (conversationId) {
-      const savedConversations = localStorage.getItem("ai-chat-conversations")
-      if (savedConversations) {
+
+    const loadFromStorage = async () => {
+      if (conversationId) {
+        setIsMessagesLoading(true)
         try {
-          const conversations = JSON.parse(savedConversations)
-          const conversation = conversations.find((c: any) => c.id === conversationId)
-          if (conversation && conversation.messages) {
-            setMessages(conversation.messages)
-            // Calculate totals from loaded messages
-            const totalTokensUsed = conversation.messages.reduce((sum: number, msg: Message) => sum + (msg.tokens || 0), 0)
-            const totalCostUsed = conversation.messages.reduce((sum: number, msg: Message) => sum + (msg.cost || 0), 0)
+          const conv = await storage.getConversation(conversationId)
+          if (conv?.messages) {
+            const mapped = conv.messages as any as Message[]
+            setMessages(mapped)
+            const totalTokensUsed = mapped.reduce((sum: number, msg: Message) => sum + (msg.tokens || 0), 0)
+            const totalCostUsed = mapped.reduce((sum: number, msg: Message) => sum + (msg.cost || 0), 0)
             setTotalTokens(totalTokensUsed)
             setTotalCost(totalCostUsed)
+          } else {
+            setMessages([])
+            setTotalTokens(0)
+            setTotalCost(0)
           }
         } catch (error) {
-          console.error("Failed to load conversation:", error)
+          console.error('Failed to load conversation from storage:', error)
+        } finally {
+          setIsMessagesLoading(false)
         }
+      } else {
+        // New conversation - clear all state (no skeleton for new chat)
+        setIsMessagesLoading(false)
+        setMessages([])
+        setTotalTokens(0)
+        setTotalCost(0)
+        setMessage("")
+        setSelectedCategory(null)
+        setError(null)
+        setEditingMessageId(null)
+        setEditingContent("")
       }
-    } else {
-      // New conversation - clear all state
-      setMessages([])
-      setTotalTokens(0)
-      setTotalCost(0)
-      setMessage("") // Clear input
-      setSelectedCategory(null) // Reset category selection
-      setError(null) // Clear any errors
-      setEditingMessageId(null) // Clear edit mode
-      setEditingContent("") // Clear edit content
     }
-    
+
+    void loadFromStorage()
     return () => clearInterval(interval)
   }, [conversationId])
 
@@ -363,9 +372,21 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
 
     setIsGenerating(true)
 
-    // Set loading indicator in sidebar for current conversation
-    if (conversationId && (window as any).conversationHelpers?.setConversationLoading) {
-      (window as any).conversationHelpers.setConversationLoading(conversationId)
+    // Prepare provisional conversation row for new chats (do not show spinner yet)
+    const providerHelpers = (window as any).conversationHelpers
+    if (!conversationId) {
+      const title = userMessage.content.slice(0, 50) + (userMessage.content.length > 50 ? "..." : "")
+      const provisionalId = `prov-${Date.now()}`
+      pendingConversationIdRef.current = provisionalId
+      providerHelpers?.addConversation?.({
+        id: provisionalId,
+        title,
+        preview: userMessage.content,
+        timestamp: new Date().toLocaleTimeString(),
+        tokens: userMessage.tokens,
+        cost: userMessage.cost,
+        createdAt: new Date(),
+      })
     }
 
     try {
@@ -395,6 +416,12 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
           ...messages.map(m => ({ role: m.role, content: m.content })),
           { role: "user", content: userMessage.content }
         ]
+
+        // Show spinner in sidebar only when AI starts replying
+        const loadingId = conversationId ?? pendingConversationIdRef.current
+        if (loadingId) {
+          providerHelpers?.setConversationLoading?.(loadingId)
+        }
 
         const resp = await aiService.sendMessage(chatMessages, selectedModel, 0.7)
 
@@ -432,6 +459,14 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
           } : m))
         }
         return
+      }
+
+      // Show spinner in sidebar only when AI starts replying
+      {
+        const loadingId = conversationId ?? pendingConversationIdRef.current
+        if (loadingId) {
+          providerHelpers?.setConversationLoading?.(loadingId)
+        }
       }
 
       // Start streaming
@@ -494,7 +529,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
       setTotalTokens(prev => prev + finalTokensUsed)
       setTotalCost(prev => prev + finalCost)
 
-      // Save conversation to localStorage
+      // Persist conversation (cloud/local via storage)
       saveConversation(finalMessages, finalTokensUsed, finalCost)
 
     } catch (err) {
@@ -506,75 +541,61 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
       if ((window as any).conversationHelpers?.clearConversationLoading) {
         (window as any).conversationHelpers.clearConversationLoading()
       }
+      pendingConversationIdRef.current = null
     }
   }
 
-  const saveConversation = (updatedMessages: Message[], tokensUsed: number, cost: number) => {
+  const saveConversation = async (updatedMessages: Message[], tokensUsed: number, cost: number) => {
+    const firstUserMessage = updatedMessages.find(m => m.role === "user")
+    const title = firstUserMessage
+      ? firstUserMessage.content.slice(0, 50) + (firstUserMessage.content.length > 50 ? "..." : "")
+      : "New Conversation"
+
+    const toStored = (msgs: Message[]): StoredMessage[] => msgs.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: new Date().toISOString(),
+      tokens: m.tokens,
+      cost: m.cost,
+      model: m.model,
+      reasoningTokens: m.reasoningTokens,
+      inputTokens: m.inputTokens,
+      outputTokens: m.outputTokens,
+      contextTokensAfter: m.contextTokensAfter,
+    }))
+
     if (!conversationId && updatedMessages.length > 0) {
-      // Create new conversation
-      const newConversationId = `conv-${Date.now()}`
-      const firstUserMessage = updatedMessages.find(m => m.role === "user")
-      const title = firstUserMessage ? 
-        firstUserMessage.content.slice(0, 50) + (firstUserMessage.content.length > 50 ? "..." : "") :
-        "New Conversation"
-      
-      const newConversation = {
-        id: newConversationId,
+      // If a provisional row already exists (set at send time), don't add another
+      const provisionalId = pendingConversationIdRef.current
+      const newId = await storage.createConversation({
         title,
         preview: firstUserMessage?.content || "",
-        timestamp: new Date().toLocaleTimeString(),
         tokens: tokensUsed,
         cost,
-        createdAt: new Date(),
-        messages: updatedMessages
+        messages: toStored(updatedMessages)
+      })
+      if (provisionalId && (window as any).conversationHelpers?.removeConversation) {
+        (window as any).conversationHelpers.removeConversation(provisionalId)
       }
-
-      // Add to conversations list using the helper function
-      if ((window as any).conversationHelpers?.addConversation) {
-        (window as any).conversationHelpers.addConversation(newConversation)
-      }
-
-      // Update the parent component to switch to this conversation
       if ((window as any).setSelectedConversation) {
-        (window as any).setSelectedConversation(newConversationId)
+        (window as any).setSelectedConversation(newId)
       }
-
-      // Set loading indicator for the new conversation if currently generating
       if (isGenerating && (window as any).conversationHelpers?.setConversationLoading) {
-        (window as any).conversationHelpers.setConversationLoading(newConversationId)
+        (window as any).conversationHelpers.setConversationLoading(newId)
       }
+      pendingConversationIdRef.current = null
     } else if (conversationId) {
-      // Update existing conversation
-      const savedConversations = localStorage.getItem("ai-chat-conversations")
-      if (savedConversations) {
-        try {
-          const conversations = JSON.parse(savedConversations)
-          const updatedConversations = conversations.map((conv: any) => {
-            if (conv.id === conversationId) {
-              return {
-                ...conv,
-                messages: updatedMessages,
-                tokens: (conv.tokens || 0) + tokensUsed,
-                cost: (conv.cost || 0) + cost,
-                preview: updatedMessages.find((m: Message) => m.role === "user")?.content || conv.preview
-              }
-            }
-            return conv
-          })
-          
-          localStorage.setItem("ai-chat-conversations", JSON.stringify(updatedConversations))
-          
-          // Update using helper function
-          if ((window as any).conversationHelpers?.updateConversation) {
-            (window as any).conversationHelpers.updateConversation(conversationId, {
-              messages: updatedMessages,
-              tokens: (totalTokens || 0) + tokensUsed,
-              cost: (totalCost || 0) + cost
-            })
-          }
-        } catch (error) {
-          console.error("Failed to save conversation:", error)
-        }
+      // Update existing
+      try {
+        await storage.updateConversation(conversationId, {
+          preview: firstUserMessage?.content,
+          tokens: (totalTokens || 0) + tokensUsed,
+          cost: (totalCost || 0) + cost,
+          messages: toStored(updatedMessages)
+        })
+      } catch (error) {
+        console.error('Failed to save conversation', error)
       }
     }
   }
@@ -847,8 +868,23 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps) {
             </div>
           </div>
         )}
+        {/* Skeleton while loading messages for existing conversation */}
+        {isMessagesLoading && (
+          <div className="flex flex-col items-center justify-center h-full px-4 py-8">
+            <div className="w-full max-w-2xl space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className={`flex ${i % 2 ? 'justify-end' : 'justify-start'}`}>
+                  <div className="max-w-[85%] md:max-w-[70%]">
+                    <div className="h-16 bg-slate-700/30 rounded-2xl animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Modern Welcome Screen */}
-        {messages.length === 0 && (
+        {!isMessagesLoading && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full px-4 py-8">
             <div className="text-center max-w-xl mx-auto">
               <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
